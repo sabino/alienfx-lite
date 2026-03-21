@@ -39,14 +39,14 @@ jobs:
         run: |
           $installer = Get-ChildItem .\artifacts\release\AlienFxLite-Setup-win-x64-v*.exe | Select-Object -First 1
           $installerLog = Join-Path $PWD 'artifacts\release\installer-smoke.log'
-          & $installer.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/LOG=$installerLog"
-          if ($LASTEXITCODE -ne 0) {
+          $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=$installerLog" -PassThru -Wait
+          if ($installProcess.ExitCode -ne 0) {
             if (Test-Path $installerLog) {
               Get-Content $installerLog
             }
-            throw "Installer exited with code $LASTEXITCODE."
+            throw "Installer exited with code $($installProcess.ExitCode)."
           }
-          Start-Sleep -Seconds 5
+
           $service = Get-Service AlienFxLiteService -ErrorAction Stop
           if ($service.Status -ne 'Running') {
             if (Test-Path $installerLog) {
@@ -56,7 +56,10 @@ jobs:
           }
           .\artifacts\staging\tool\AlienFxLite.Tool.exe status
           $uninstaller = Get-ChildItem "$env:ProgramFiles\AlienFx Lite\unins*.exe" | Select-Object -First 1
-          & $uninstaller.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          $uninstallProcess = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait
+          if ($uninstallProcess.ExitCode -ne 0) {
+            throw "Uninstaller exited with code $($uninstallProcess.ExitCode)."
+          }
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
