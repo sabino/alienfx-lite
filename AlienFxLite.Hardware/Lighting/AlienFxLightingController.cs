@@ -55,13 +55,21 @@ public sealed class AlienFxLightingController : IDisposable
     {
         lock (_sync)
         {
-            if (TryApply(snapshot, out error))
+            if (TryProgramSnapshot(snapshot, resetDevice: true, forceUpdate: false, out error))
             {
                 return true;
             }
 
             ResetConnection();
-            return TryApply(snapshot, out error);
+            return TryProgramSnapshot(snapshot, resetDevice: true, forceUpdate: false, out error);
+        }
+    }
+
+    public bool Maintain(LightingSnapshot snapshot, out string? error)
+    {
+        lock (_sync)
+        {
+            return TryProgramSnapshot(snapshot, resetDevice: false, forceUpdate: true, out error);
         }
     }
 
@@ -81,7 +89,7 @@ public sealed class AlienFxLightingController : IDisposable
         }
     }
 
-    private bool TryApply(LightingSnapshot snapshot, out string? error)
+    private bool TryProgramSnapshot(LightingSnapshot snapshot, bool resetDevice, bool forceUpdate, out string? error)
     {
         error = null;
         if (!EnsureConnected(out error))
@@ -95,12 +103,12 @@ public sealed class AlienFxLightingController : IDisposable
             return false;
         }
 
-        if (!_device.Reset(out error))
+        if (resetDevice && !_device.Reset(out error))
         {
             return false;
         }
 
-        bool needsUpdate = false;
+        bool needsUpdate = forceUpdate;
         foreach (IGrouping<RgbColor, ZoneLightingState> staticGroup in snapshot.ZoneStates
                      .Where(static state => state.Effect == LightingEffect.Static)
                      .GroupBy(static state => state.PrimaryColor))
@@ -201,7 +209,13 @@ public sealed class AlienFxLightingController : IDisposable
             }
         }
 
-        return _device.CommitSavedLightingBlock(SavedLightingBlockId, out error);
+        if (!_device.CommitSavedLightingBlock(SavedLightingBlockId, out error))
+        {
+            return false;
+        }
+
+        _device.SetStartupLightingBlock(SavedLightingBlockId, out _);
+        return true;
     }
 
     private void ResetConnection()

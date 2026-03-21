@@ -172,7 +172,7 @@ internal sealed class BrokerRuntime : IDisposable
             {
                 if (_lightingState.KeepAlive)
                 {
-                    ApplyLightingCore();
+                    MaintainLightingCore();
                 }
                 else
                 {
@@ -325,6 +325,24 @@ internal sealed class BrokerRuntime : IDisposable
         if (!string.Equals(_lastLightingError, error, StringComparison.Ordinal))
         {
             _diagnostics.Warn($"Lighting apply failed: {error}");
+        }
+
+        _lastLightingError = error;
+        return false;
+    }
+
+    private bool MaintainLightingCore()
+    {
+        if (_lightingController.Maintain(_lightingState, out string? error) ||
+            _lightingController.Apply(_lightingState, out error))
+        {
+            _lastLightingError = null;
+            return true;
+        }
+
+        if (!string.Equals(_lastLightingError, error, StringComparison.Ordinal))
+        {
+            _diagnostics.Warn($"Lighting keepalive failed: {error}");
         }
 
         _lastLightingError = error;

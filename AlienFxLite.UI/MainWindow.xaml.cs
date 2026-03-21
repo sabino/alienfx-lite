@@ -1,26 +1,73 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using AlienFxLite.Contracts;
-using WinForms = System.Windows.Forms;
 using DrawingColor = System.Drawing.Color;
 using MediaColor = System.Windows.Media.Color;
+using MediaBrushes = System.Windows.Media.Brushes;
+using WinForms = System.Windows.Forms;
+using WpfCursors = System.Windows.Input.Cursors;
 using WpfButton = System.Windows.Controls.Button;
+using WpfMessageBox = System.Windows.MessageBox;
+using WpfPoint = System.Windows.Point;
 
 namespace AlienFxLite.UI;
 
 public partial class MainWindow : Window
 {
-    private static readonly MediaColor Accent = MediaColor.FromRgb(0, 214, 255);
-    private static readonly MediaColor AccentStrong = MediaColor.FromRgb(0, 255, 200);
-    private static readonly MediaColor Danger = MediaColor.FromRgb(255, 120, 150);
+    private static readonly MediaColor Accent = MediaColor.FromRgb(94, 220, 255);
+    private static readonly MediaColor AccentStrong = MediaColor.FromRgb(124, 255, 228);
+    private static readonly MediaColor Danger = MediaColor.FromRgb(255, 122, 156);
+
+    private static readonly IReadOnlyDictionary<LightingZone, string> ZoneNames = new Dictionary<LightingZone, string>
+    {
+        [LightingZone.KbLeft] = "KB Left",
+        [LightingZone.KbCenter] = "KB Center",
+        [LightingZone.KbRight] = "KB Right",
+        [LightingZone.KbNumPad] = "KB NumPad",
+    };
+
+    private static readonly LightingZone?[] KeyboardDeck =
+    [
+        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
+        LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
+        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
+        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
+
+        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
+        LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
+        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
+        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
+
+        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
+        LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
+        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
+        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
+
+        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
+        LightingZone.KbCenter, LightingZone.KbCenter, null, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
+        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
+        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
+
+        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
+        LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
+        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
+        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
+
+        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
+        LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
+        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
+        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
+    ];
 
     private readonly AlienFxLiteServiceClient _client = new();
     private readonly WinForms.ColorDialog _colorDialog = new() { FullOpen = true };
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly Dictionary<LightingZone, ToggleButton> _zoneButtons;
+    private readonly List<KeyCapCell> _keyboardCells = [];
 
     private DrawingColor _primaryColor = DrawingColor.White;
     private DrawingColor _secondaryColor = DrawingColor.Black;
@@ -40,6 +87,9 @@ public partial class MainWindow : Window
             [LightingZone.KbNumPad] = NumPadZoneButton,
         };
 
+        BuildKeyboardDeck();
+
+        _loadingLightingState = true;
         foreach (ToggleButton zoneButton in _zoneButtons.Values)
         {
             zoneButton.IsChecked = true;
@@ -51,12 +101,14 @@ public partial class MainWindow : Window
         BrightnessSlider.Value = 100;
         KeepAliveCheck.IsChecked = true;
         EnabledCheck.IsChecked = true;
+        _loadingLightingState = false;
 
         UpdateColorButton(PrimaryColorButton, _primaryColor);
         UpdateColorButton(SecondaryColorButton, _secondaryColor);
         UpdateTrackLabels();
         UpdateEffectUi();
         UpdateApplyButtonState();
+        RefreshKeyboardPreview();
 
         _refreshTimer.Tick += async (_, _) => await RefreshStatusAsync(silent: true, preservePendingLighting: true).ConfigureAwait(true);
         Closed += (_, _) => _refreshTimer.Stop();
@@ -85,7 +137,7 @@ public partial class MainWindow : Window
             List<LightingZone> zones = _zoneButtons.Where(pair => pair.Value.IsChecked == true).Select(pair => pair.Key).ToList();
             if (zones.Count == 0)
             {
-                System.Windows.MessageBox.Show(this, "Select at least one keyboard zone.", "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Warning);
+                WpfMessageBox.Show(this, "Select at least one keyboard zone.", "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -107,29 +159,19 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show(this, ex.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
+            WpfMessageBox.Show(this, ex.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
-    private async void FanAutoButton_Click(object sender, RoutedEventArgs e)
-    {
+    private async void FanAutoButton_Click(object sender, RoutedEventArgs e) =>
         await ApplyFanModeAsync(FanControlMode.Auto).ConfigureAwait(true);
-    }
 
-    private async void FanMaxButton_Click(object sender, RoutedEventArgs e)
-    {
+    private async void FanMaxButton_Click(object sender, RoutedEventArgs e) =>
         await ApplyFanModeAsync(FanControlMode.Max).ConfigureAwait(true);
-    }
 
-    private void PrimaryColorButton_Click(object sender, RoutedEventArgs e)
-    {
-        ChooseColor(true);
-    }
+    private void PrimaryColorButton_Click(object sender, RoutedEventArgs e) => ChooseColor(primary: true);
 
-    private void SecondaryColorButton_Click(object sender, RoutedEventArgs e)
-    {
-        ChooseColor(false);
-    }
+    private void SecondaryColorButton_Click(object sender, RoutedEventArgs e) => ChooseColor(primary: false);
 
     private void EffectCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -149,15 +191,9 @@ public partial class MainWindow : Window
         MarkLightingDirty();
     }
 
-    private void SettingChanged(object sender, RoutedEventArgs e)
-    {
-        MarkLightingDirty();
-    }
+    private void SettingChanged(object sender, RoutedEventArgs e) => MarkLightingDirty();
 
-    private void ZoneButton_Changed(object sender, RoutedEventArgs e)
-    {
-        MarkLightingDirty();
-    }
+    private void ZoneButton_Changed(object sender, RoutedEventArgs e) => MarkLightingDirty();
 
     private async Task RefreshStatusAsync(bool silent, bool preservePendingLighting)
     {
@@ -181,10 +217,12 @@ public partial class MainWindow : Window
             FanRpmText.Text = "RPM: n/a";
             LightingHintText.Text = "The broker is offline, so keyboard changes cannot be applied right now.";
             FanHintText.Text = "Fan control requires the broker service.";
+            PendingText.Text = "Broker unavailable.";
+            PendingText.Foreground = new SolidColorBrush(Danger);
 
             if (!silent)
             {
-                System.Windows.MessageBox.Show(this, ex.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
+                WpfMessageBox.Show(this, ex.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         finally
@@ -202,7 +240,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show(this, ex.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
+            WpfMessageBox.Show(this, ex.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -252,16 +290,54 @@ public partial class MainWindow : Window
             }
 
             _lightingDirty = false;
-            UpdateTrackLabels();
-            UpdateEffectUi();
-            UpdateApplyButtonState();
         }
 
-        PendingText.Text = _lightingDirty
-            ? "Pending local edits. Press Apply Lighting to commit them."
-            : "No pending local edits.";
-        PendingText.Foreground = new SolidColorBrush(_lightingDirty ? Accent : Colors.White);
-        LightingHintText.Text = $"Effect: {EffectCombo.SelectedItem}  |  Brightness: {(int)BrightnessSlider.Value}%  |  KeepAlive: {(KeepAliveCheck.IsChecked == true ? "on" : "off")}";
+        UpdateTrackLabels();
+        UpdateEffectUi();
+        UpdateApplyButtonState();
+        RefreshKeyboardPreview();
+    }
+
+    private void BuildKeyboardDeck()
+    {
+        KeyboardMatrixPanel.Children.Clear();
+        _keyboardCells.Clear();
+
+        foreach (LightingZone? zone in KeyboardDeck)
+        {
+            Border keyCap = new()
+            {
+                Margin = new Thickness(3),
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(1),
+                MinHeight = 22,
+            };
+
+            if (zone is null)
+            {
+                keyCap.Opacity = 0;
+                keyCap.IsHitTestVisible = false;
+                KeyboardMatrixPanel.Children.Add(keyCap);
+                continue;
+            }
+
+            keyCap.Tag = zone.Value;
+            keyCap.Cursor = WpfCursors.Hand;
+            keyCap.MouseLeftButtonUp += KeyboardCell_MouseLeftButtonUp;
+            KeyboardMatrixPanel.Children.Add(keyCap);
+            _keyboardCells.Add(new KeyCapCell(zone.Value, keyCap));
+        }
+    }
+
+    private void KeyboardCell_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not Border { Tag: LightingZone zone })
+        {
+            return;
+        }
+
+        _zoneButtons[zone].IsChecked = _zoneButtons[zone].IsChecked != true;
+        e.Handled = true;
     }
 
     private void ChooseColor(bool primary)
@@ -295,11 +371,20 @@ public partial class MainWindow : Window
 
         _lightingDirty = true;
         UpdateApplyButtonState();
+        RefreshKeyboardPreview();
     }
 
     private void UpdateApplyButtonState()
     {
-        ApplyLightingButton.Content = _lightingDirty ? "APPLY LIGHTING *" : "APPLY LIGHTING";
+        ApplyButtonTitleText.Text = _lightingDirty ? "Apply Lighting" : "Reapply Lighting";
+        ApplyButtonHintText.Text = _lightingDirty
+            ? "Commit pending deck changes to the keyboard and saved broker state."
+            : "Force the current saved deck back onto the keyboard if firmware drifted.";
+
+        PendingText.Text = _lightingDirty
+            ? "Pending local edits. Press Apply Lighting to commit them."
+            : "Keyboard deck matches the saved broker state.";
+        PendingText.Foreground = new SolidColorBrush(_lightingDirty ? Accent : Colors.White);
     }
 
     private void UpdateEffectUi()
@@ -316,14 +401,94 @@ public partial class MainWindow : Window
         BrightnessValueText.Text = $"{(int)BrightnessSlider.Value}%";
     }
 
+    private void RefreshKeyboardPreview()
+    {
+        LightingEffect effect = (LightingEffect)(EffectCombo.SelectedItem ?? LightingEffect.Static);
+        MediaColor primary = MediaColor.FromRgb(_primaryColor.R, _primaryColor.G, _primaryColor.B);
+        MediaColor secondary = MediaColor.FromRgb(_secondaryColor.R, _secondaryColor.G, _secondaryColor.B);
+        bool enabled = EnabledCheck.IsChecked != false;
+
+        foreach (KeyCapCell cell in _keyboardCells)
+        {
+            bool selected = _zoneButtons[cell.Zone].IsChecked == true;
+            cell.Element.Background = BuildKeyBrush(selected, enabled, effect, primary, secondary);
+            cell.Element.BorderBrush = new SolidColorBrush(selected
+                ? WithAlpha(Lighten(primary, enabled ? 0.22 : 0.08), enabled ? (byte)230 : (byte)110)
+                : MediaColor.FromArgb(92, 76, 97, 125));
+            cell.Element.Opacity = selected ? (enabled ? 1 : 0.74) : 0.94;
+        }
+
+        string selectedZones = string.Join(", ", _zoneButtons.Where(pair => pair.Value.IsChecked == true).Select(pair => ZoneNames[pair.Key]));
+        if (string.IsNullOrWhiteSpace(selectedZones))
+        {
+            selectedZones = "No zones selected";
+        }
+
+        LightingHintText.Text =
+            $"Selected: {selectedZones}  |  Effect: {EffectCombo.SelectedItem}  |  Brightness: {(int)BrightnessSlider.Value}%  |  KeepAlive: {(KeepAliveCheck.IsChecked == true ? "on" : "off")}";
+    }
+
+    private static System.Windows.Media.Brush BuildKeyBrush(bool selected, bool enabled, LightingEffect effect, MediaColor primary, MediaColor secondary)
+    {
+        if (!selected)
+        {
+            return new LinearGradientBrush(
+                MediaColor.FromArgb(176, 30, 42, 58),
+                MediaColor.FromArgb(208, 12, 18, 27),
+                new WpfPoint(0, 0),
+                new WpfPoint(1, 1));
+        }
+
+        if (!enabled)
+        {
+            return new LinearGradientBrush(
+                MediaColor.FromArgb(118, 56, 71, 92),
+                MediaColor.FromArgb(150, 21, 29, 40),
+                new WpfPoint(0, 0),
+                new WpfPoint(1, 1));
+        }
+
+        if (effect == LightingEffect.Morph)
+        {
+            return new LinearGradientBrush(
+                WithAlpha(Lighten(primary, 0.18), 224),
+                WithAlpha(Lighten(secondary, 0.12), 206),
+                new WpfPoint(0, 0),
+                new WpfPoint(1, 1));
+        }
+
+        return new LinearGradientBrush(
+            WithAlpha(Lighten(primary, 0.18), effect == LightingEffect.Pulse ? (byte)212 : (byte)232),
+            WithAlpha(Darken(primary, 0.12), effect == LightingEffect.Pulse ? (byte)182 : (byte)214),
+            new WpfPoint(0, 0),
+            new WpfPoint(1, 1));
+    }
+
     private static void UpdateColorButton(WpfButton button, DrawingColor color)
     {
         button.Content = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
         button.Background = new SolidColorBrush(MediaColor.FromRgb(color.R, color.G, color.B));
-        button.Foreground = color.GetBrightness() < 0.45f ? System.Windows.Media.Brushes.White : System.Windows.Media.Brushes.Black;
+        button.BorderBrush = new SolidColorBrush(color.GetBrightness() < 0.45f ? AccentStrong : MediaColor.FromRgb(19, 28, 39));
+        button.Foreground = color.GetBrightness() < 0.45f ? MediaBrushes.White : MediaBrushes.Black;
+    }
+
+    private static MediaColor WithAlpha(MediaColor color, byte alpha) => MediaColor.FromArgb(alpha, color.R, color.G, color.B);
+
+    private static MediaColor Lighten(MediaColor color, double amount)
+    {
+        byte Blend(byte channel) => (byte)Math.Clamp(channel + ((255 - channel) * amount), 0, 255);
+        return MediaColor.FromRgb(Blend(color.R), Blend(color.G), Blend(color.B));
+    }
+
+    private static MediaColor Darken(MediaColor color, double amount)
+    {
+        byte Blend(byte channel) => (byte)Math.Clamp(channel * (1 - amount), 0, 255);
+        return MediaColor.FromRgb(Blend(color.R), Blend(color.G), Blend(color.B));
     }
 
     private static RgbColor ToRgb(DrawingColor color) => new((byte)color.R, (byte)color.G, (byte)color.B);
 
     private static DrawingColor FromRgb(RgbColor color) => DrawingColor.FromArgb(color.R, color.G, color.B);
+
+    private sealed record KeyCapCell(LightingZone Zone, Border Element);
 }

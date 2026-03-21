@@ -6,34 +6,54 @@
         xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         mc:Ignorable="d"
         Title="AlienFx Lite"
-        Width="1200"
-        Height="760"
-        MinWidth="1040"
-        MinHeight="680"
+        Width="1280"
+        Height="840"
+        MinWidth="1120"
+        MinHeight="720"
         Loaded="Window_Loaded"
         SourceInitialized="Window_SourceInitialized"
-        Background="#080C13">
+        Background="#080C13"
+        TextElement.FontFamily="Segoe UI Variable Text">
     <Window.Resources>
-        <SolidColorBrush x:Key="TextBrush" Color="#E8EEF7"/>
-        <SolidColorBrush x:Key="MutedBrush" Color="#98A7C2"/>
-        <SolidColorBrush x:Key="AccentBrush" Color="#00D6FF"/>
-        <SolidColorBrush x:Key="AccentStrongBrush" Color="#00FFC8"/>
-        <SolidColorBrush x:Key="DangerBrush" Color="#FF7896"/>
-        <SolidColorBrush x:Key="GlassBrush" Color="#77141C2B"/>
-        <SolidColorBrush x:Key="GlassAltBrush" Color="#66202A3A"/>
-        <SolidColorBrush x:Key="BorderBrushGlass" Color="#425574"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#ECF3FC"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#9FB0C9"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#5EDCFF"/>
+        <SolidColorBrush x:Key="AccentStrongBrush" Color="#7CFFE4"/>
+        <SolidColorBrush x:Key="DangerBrush" Color="#FF7A9C"/>
+        <SolidColorBrush x:Key="GlassBrush" Color="#7A131C2A"/>
+        <SolidColorBrush x:Key="GlassAltBrush" Color="#8E0E1622"/>
+        <SolidColorBrush x:Key="BorderBrushGlass" Color="#435E82"/>
+        <SolidColorBrush x:Key="InnerBorderBrush" Color="#57759A"/>
+
+        <LinearGradientBrush x:Key="CardBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#96131B28" Offset="0"/>
+            <GradientStop Color="#A0111823" Offset="0.52"/>
+            <GradientStop Color="#96101521" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="PanelBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#C20D141F" Offset="0"/>
+            <GradientStop Color="#AA0A1017" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="PrimaryActionBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#FF31D1F0" Offset="0"/>
+            <GradientStop Color="#FF1C9FC2" Offset="0.5"/>
+            <GradientStop Color="#FF0B6F89" Offset="1"/>
+        </LinearGradientBrush>
 
         <Style x:Key="GlassCardStyle" TargetType="Border">
-            <Setter Property="CornerRadius" Value="26"/>
+            <Setter Property="CornerRadius" Value="28"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Background" Value="{StaticResource GlassBrush}"/>
+            <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrushGlass}"/>
         </Style>
 
         <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-            <Setter Property="FontFamily" Value="Bahnschrift SemiBold"/>
-            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Display"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="20"/>
         </Style>
 
         <Style x:Key="SectionHintStyle" TargetType="TextBlock">
@@ -44,19 +64,22 @@
 
         <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
-            <Setter Property="FontFamily" Value="Bahnschrift SemiBold"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Display"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
         </Style>
 
         <Style x:Key="GlassButtonStyle" TargetType="Button">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-            <Setter Property="Background" Value="#66212D3F"/>
+            <Setter Property="Background" Value="#72203044"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrushGlass}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="16,10"/>
-            <Setter Property="FontFamily" Value="Bahnschrift SemiBold"/>
+            <Setter Property="Padding" Value="16,11"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Display"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -66,14 +89,28 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="18">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Grid>
+                                <Border Margin="1"
+                                        CornerRadius="17"
+                                        Background="#14FFFFFF"
+                                        Opacity="0.35"
+                                        VerticalAlignment="Top"
+                                        Height="18"/>
+                                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="#88314158"/>
+                                <Setter TargetName="Chrome" Property="Background" Value="#8F29415C"/>
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#5EA7CC"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="#AA243247"/>
+                                <Setter TargetName="Chrome" Property="Background" Value="#A4182C40"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.6"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -81,21 +118,17 @@
             </Setter>
         </Style>
 
-        <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource GlassButtonStyle}">
-            <Setter Property="Background" Value="#AA12677A"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Padding" Value="18,14"/>
-        </Style>
-
-        <Style x:Key="ZoneToggleStyle" TargetType="ToggleButton">
+        <Style x:Key="ZoneChipStyle" TargetType="ToggleButton">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-            <Setter Property="Background" Value="#66303D52"/>
+            <Setter Property="Background" Value="#5A1D2938"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrushGlass}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="12"/>
-            <Setter Property="FontFamily" Value="Bahnschrift SemiBold"/>
-            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="Margin" Value="0,0,10,10"/>
+            <Setter Property="MinWidth" Value="132"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Display"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
@@ -103,17 +136,192 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="22">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                CornerRadius="16">
+                            <Grid>
+                                <Border x:Name="ZoneGlow"
+                                        Margin="1"
+                                        CornerRadius="15"
+                                        Background="#14FFFFFF"
+                                        Opacity="0.15"/>
+                                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="ZoneChrome" Property="Background" Value="#B8176B82"/>
+                                <Setter TargetName="ZoneChrome" Property="Background" Value="#A61E5F77"/>
                                 <Setter TargetName="ZoneChrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                                 <Setter Property="Foreground" Value="{StaticResource AccentStrongBrush}"/>
+                                <Setter TargetName="ZoneGlow" Property="Opacity" Value="0.4"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ZoneChrome" Property="Background" Value="#88303F57"/>
+                                <Setter TargetName="ZoneChrome" Property="Background" Value="#86304863"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GlassComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBorder"
+                                Margin="0,2"
+                                CornerRadius="14"
+                                Background="{TemplateBinding Background}">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Left"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#7A20384F"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#A11E5C75"/>
+                                <Setter Property="Foreground" Value="{StaticResource AccentStrongBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GlassComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Background" Value="#6D19263A"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushGlass}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource GlassComboBoxItemStyle}"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="ComboChrome"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="18">
+                                <Grid>
+                                    <Border Margin="1"
+                                            CornerRadius="17"
+                                            Background="#14FFFFFF"
+                                            Opacity="0.22"
+                                            VerticalAlignment="Top"
+                                            Height="18"/>
+                                    <ContentPresenter Margin="16,0,48,0"
+                                                      VerticalAlignment="Center"
+                                                      HorizontalAlignment="Left"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                      IsHitTestVisible="False"/>
+                                    <Path Width="12"
+                                          Height="7"
+                                          Margin="0,0,18,0"
+                                          HorizontalAlignment="Right"
+                                          VerticalAlignment="Center"
+                                          Stroke="{StaticResource AccentBrush}"
+                                          StrokeThickness="1.8"
+                                          Data="M 0 0 L 6 6 L 12 0"/>
+                                </Grid>
+                            </Border>
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Bottom"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                   PopupAnimation="Fade">
+                                <Grid MinWidth="{TemplateBinding ActualWidth}"
+                                      MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <Border Margin="0,8,0,0"
+                                            Padding="8"
+                                            CornerRadius="20"
+                                            Background="#EA0C131D"
+                                            BorderBrush="{StaticResource InnerBorderBrush}"
+                                            BorderThickness="1">
+                                        <ScrollViewer SnapsToDevicePixels="True">
+                                            <StackPanel IsItemsHost="True"
+                                                        KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ComboChrome" Property="BorderBrush" Value="#66AFD8"/>
+                                <Setter TargetName="ComboChrome" Property="Background" Value="#7C1C3149"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ComboChrome" Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryActionButtonStyle" TargetType="Button" BasedOn="{StaticResource GlassButtonStyle}">
+            <Setter Property="Background" Value="{StaticResource PrimaryActionBrush}"/>
+            <Setter Property="BorderBrush" Value="#A5EEFFFF"/>
+            <Setter Property="BorderThickness" Value="1.2"/>
+            <Setter Property="Foreground" Value="#04131B"/>
+            <Setter Property="Padding" Value="22,18"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ActionChrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="24">
+                            <Grid>
+                                <Ellipse Width="220"
+                                         Height="220"
+                                         HorizontalAlignment="Right"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,-40,0"
+                                         Opacity="0.35">
+                                    <Ellipse.Fill>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#99FFFFFF" Offset="0"/>
+                                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Ellipse.Fill>
+                                    <Ellipse.Effect>
+                                        <BlurEffect Radius="34"/>
+                                    </Ellipse.Effect>
+                                </Ellipse>
+                                <Border Margin="1"
+                                        CornerRadius="23"
+                                        Background="#18FFFFFF"
+                                        VerticalAlignment="Top"
+                                        Height="22"/>
+                                <ContentPresenter Margin="{TemplateBinding Padding}"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ActionChrome" Property="BorderBrush" Value="#ECFFFFFF"/>
+                                <Setter TargetName="ActionChrome" Property="Opacity" Value="0.97"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ActionChrome" Property="Opacity" Value="0.88"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -126,105 +334,198 @@
         <Grid.Background>
             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                 <GradientStop Color="#09111A" Offset="0"/>
-                <GradientStop Color="#0A101C" Offset="0.45"/>
-                <GradientStop Color="#111A2A" Offset="1"/>
+                <GradientStop Color="#0B1019" Offset="0.42"/>
+                <GradientStop Color="#121B2A" Offset="1"/>
             </LinearGradientBrush>
         </Grid.Background>
 
         <Canvas IsHitTestVisible="False">
-            <Ellipse Width="380" Height="380" Canvas.Left="-40" Canvas.Top="-70">
+            <Ellipse Width="420" Height="420" Canvas.Left="-70" Canvas.Top="-88">
                 <Ellipse.Fill>
                     <RadialGradientBrush>
-                        <GradientStop Color="#5523C0FF" Offset="0"/>
-                        <GradientStop Color="#001A3A63" Offset="1"/>
+                        <GradientStop Color="#4C31D1F0" Offset="0"/>
+                        <GradientStop Color="#00132D4A" Offset="1"/>
                     </RadialGradientBrush>
                 </Ellipse.Fill>
                 <Ellipse.Effect>
-                    <BlurEffect Radius="96"/>
+                    <BlurEffect Radius="102"/>
                 </Ellipse.Effect>
             </Ellipse>
-            <Ellipse Width="320" Height="320" Canvas.Right="-60" Canvas.Bottom="-40">
+            <Ellipse Width="360" Height="360" Canvas.Right="-56" Canvas.Bottom="28">
                 <Ellipse.Fill>
                     <RadialGradientBrush>
-                        <GradientStop Color="#4014FFC8" Offset="0"/>
-                        <GradientStop Color="#000E2F2B" Offset="1"/>
+                        <GradientStop Color="#3315FFD5" Offset="0"/>
+                        <GradientStop Color="#000C2926" Offset="1"/>
                     </RadialGradientBrush>
                 </Ellipse.Fill>
                 <Ellipse.Effect>
-                    <BlurEffect Radius="80"/>
+                    <BlurEffect Radius="90"/>
                 </Ellipse.Effect>
             </Ellipse>
         </Canvas>
 
-        <Grid Margin="24">
+        <Grid Margin="28">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Style="{StaticResource GlassCardStyle}" Padding="22" Margin="0,0,0,16">
+            <Border Grid.Row="0" Style="{StaticResource GlassCardStyle}" Padding="24" Margin="0,0,0,18">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+
                     <StackPanel>
-                        <TextBlock Foreground="{StaticResource TextBrush}" FontFamily="Bahnschrift SemiBold" FontSize="28" Text="AlienFx Lite"/>
-                        <TextBlock Foreground="{StaticResource MutedBrush}" Margin="0,6,0,12" Text="Minimal control with a cleaner visual surface and persistent hardware state."/>
-                        <TextBlock x:Name="ServiceStatusText" Foreground="{StaticResource AccentStrongBrush}" FontFamily="Bahnschrift SemiBold" FontSize="13"/>
-                        <TextBlock x:Name="DeviceStatusText" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+                        <TextBlock Foreground="{StaticResource TextBrush}"
+                                   FontFamily="Segoe UI Variable Display"
+                                   FontWeight="SemiBold"
+                                   FontSize="30"
+                                   Text="AlienFx Lite"/>
+                        <TextBlock Foreground="{StaticResource MutedBrush}"
+                                   Margin="0,6,0,14"
+                                   Text="Minimal control with a cleaner visual surface and persistent hardware state."/>
+                        <TextBlock x:Name="ServiceStatusText"
+                                   Foreground="{StaticResource AccentStrongBrush}"
+                                   FontFamily="Segoe UI Variable Display"
+                                   FontWeight="SemiBold"
+                                   FontSize="13"/>
+                        <TextBlock x:Name="DeviceStatusText"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   Margin="0,4,0,0"/>
                     </StackPanel>
-                    <Button x:Name="RefreshButton" Grid.Column="1" Style="{StaticResource GlassButtonStyle}" Width="120" Height="52" Click="RefreshButton_Click" Content="Refresh"/>
+
+                    <Button x:Name="RefreshButton"
+                            Grid.Column="1"
+                            Width="122"
+                            Height="52"
+                            Style="{StaticResource GlassButtonStyle}"
+                            Click="RefreshButton_Click"
+                            Content="Refresh"/>
                 </Grid>
             </Border>
 
             <Grid Grid.Row="1">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="1.15*"/>
-                    <ColumnDefinition Width="0.85*"/>
+                    <ColumnDefinition Width="1.12*"/>
+                    <ColumnDefinition Width="0.88*"/>
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Style="{StaticResource GlassCardStyle}" Padding="22" Margin="0,0,14,0">
+                <Border Grid.Column="0" Style="{StaticResource GlassCardStyle}" Padding="22" Margin="0,0,16,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Keyboard Zones"/>
-                            <TextBlock Style="{StaticResource SectionHintStyle}" Margin="0,6,0,0" Text="The deck below is the live selection surface. Choose the exact zone set before you apply."/>
+                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Keyboard Deck"/>
+                            <TextBlock Style="{StaticResource SectionHintStyle}"
+                                       Margin="0,6,0,0"
+                                       Text="This deck mirrors the 20 x 6 AlienFX keyboard grid. Click any lit region or use the zone chips below."/>
                         </StackPanel>
 
-                        <Border Grid.Row="1" Margin="0,18,0,18" Style="{StaticResource GlassCardStyle}" Background="{StaticResource GlassAltBrush}" Padding="18">
+                        <Border Grid.Row="1"
+                                Margin="0,18,0,18"
+                                Padding="18"
+                                CornerRadius="30"
+                                Background="{StaticResource GlassAltBrush}"
+                                BorderBrush="{StaticResource InnerBorderBrush}"
+                                BorderThickness="1">
                             <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="0.23*"/>
-                                    <ColumnDefinition Width="0.27*"/>
-                                    <ColumnDefinition Width="0.27*"/>
-                                    <ColumnDefinition Width="0.23*"/>
-                                </Grid.ColumnDefinitions>
-                                <primitives:ToggleButton x:Name="LeftZoneButton" Grid.Column="0" Style="{StaticResource ZoneToggleStyle}" Margin="0,0,8,0" Checked="ZoneButton_Changed" Unchecked="ZoneButton_Changed" Content="KB LEFT"/>
-                                <primitives:ToggleButton x:Name="CenterZoneButton" Grid.Column="1" Style="{StaticResource ZoneToggleStyle}" Margin="8,0" Checked="ZoneButton_Changed" Unchecked="ZoneButton_Changed" Content="KB CENTER"/>
-                                <primitives:ToggleButton x:Name="RightZoneButton" Grid.Column="2" Style="{StaticResource ZoneToggleStyle}" Margin="8,0" Checked="ZoneButton_Changed" Unchecked="ZoneButton_Changed" Content="KB RIGHT"/>
-                                <primitives:ToggleButton x:Name="NumPadZoneButton" Grid.Column="3" Style="{StaticResource ZoneToggleStyle}" Margin="8,0,0,0" Checked="ZoneButton_Changed" Unchecked="ZoneButton_Changed" Content="KB NUMPAD"/>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <Border Height="14"
+                                        Margin="210,0,210,18"
+                                        CornerRadius="7"
+                                        Background="#3B5D789A"/>
+
+                                <Viewbox Grid.Row="1" Stretch="Uniform">
+                                    <Grid Width="860" Height="348">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="248"/>
+                                            <RowDefinition Height="84"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Border CornerRadius="30"
+                                                Background="{StaticResource PanelBackgroundBrush}"
+                                                BorderBrush="{StaticResource InnerBorderBrush}"
+                                                BorderThickness="1.2"
+                                                Padding="18">
+                                            <primitives:UniformGrid x:Name="KeyboardMatrixPanel"
+                                                                    Rows="6"
+                                                                    Columns="20"/>
+                                        </Border>
+
+                                        <Border Grid.Row="1"
+                                                Margin="118,16,118,0"
+                                                CornerRadius="24"
+                                                Background="#43101823"
+                                                BorderBrush="#37617EA3"
+                                                BorderThickness="1">
+                                            <Border Margin="186,12"
+                                                    CornerRadius="18"
+                                                    Background="#2B0B121B"
+                                                    BorderBrush="#4E7AB6D0"
+                                                    BorderThickness="1"/>
+                                        </Border>
+                                    </Grid>
+                                </Viewbox>
+
+                                <TextBlock Grid.Row="2"
+                                           Margin="0,16,0,0"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           Text="Selected zones are previewed live with your current deck colors before you commit."
+                                           TextWrapping="Wrap"/>
                             </Grid>
                         </Border>
 
-                        <TextBlock x:Name="LightingHintText" Grid.Row="2" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                        <WrapPanel Grid.Row="2" Margin="0,0,0,6">
+                            <primitives:ToggleButton x:Name="LeftZoneButton"
+                                                     Style="{StaticResource ZoneChipStyle}"
+                                                     Content="KB Left"
+                                                     Checked="ZoneButton_Changed"
+                                                     Unchecked="ZoneButton_Changed"/>
+                            <primitives:ToggleButton x:Name="CenterZoneButton"
+                                                     Style="{StaticResource ZoneChipStyle}"
+                                                     Content="KB Center"
+                                                     Checked="ZoneButton_Changed"
+                                                     Unchecked="ZoneButton_Changed"/>
+                            <primitives:ToggleButton x:Name="RightZoneButton"
+                                                     Style="{StaticResource ZoneChipStyle}"
+                                                     Content="KB Right"
+                                                     Checked="ZoneButton_Changed"
+                                                     Unchecked="ZoneButton_Changed"/>
+                            <primitives:ToggleButton x:Name="NumPadZoneButton"
+                                                     Style="{StaticResource ZoneChipStyle}"
+                                                     Content="KB NumPad"
+                                                     Checked="ZoneButton_Changed"
+                                                     Unchecked="ZoneButton_Changed"/>
+                        </WrapPanel>
+
+                        <TextBlock x:Name="LightingHintText"
+                                   Grid.Row="3"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   TextWrapping="Wrap"/>
                     </Grid>
                 </Border>
 
                 <Grid Grid.Column="1">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="0.56*"/>
-                        <RowDefinition Height="0.24*"/>
-                        <RowDefinition Height="0.20*"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <Border Grid.Row="0" Style="{StaticResource GlassCardStyle}" Padding="22" Margin="0,0,0,14">
+                    <Border Grid.Row="0" Style="{StaticResource GlassCardStyle}" Padding="22" Margin="0,0,0,16">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -237,61 +538,148 @@
 
                             <StackPanel Grid.Row="0">
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Lighting Deck"/>
-                                <TextBlock Style="{StaticResource SectionHintStyle}" Margin="0,6,0,16" Text="Change the effect, tune the colors, then commit through the primary action."/>
+                                <TextBlock Style="{StaticResource SectionHintStyle}"
+                                           Margin="0,6,0,16"
+                                           Text="Choose the effect, tune the colors, then commit through the primary action. The broker keeps the saved hardware scene in sync."/>
                             </StackPanel>
 
-                            <Grid Grid.Row="1" Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="EFFECT"/>
-                                <ComboBox x:Name="EffectCombo" Grid.Column="1" Height="34" Background="#55212E42" Foreground="{StaticResource TextBrush}" BorderBrush="{StaticResource BorderBrushGlass}" SelectionChanged="EffectCombo_SelectionChanged"/>
+                            <Grid Grid.Row="1" Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource FieldLabelStyle}"
+                                           Width="86"
+                                           VerticalAlignment="Center"
+                                           Text="EFFECT"/>
+                                <ComboBox x:Name="EffectCombo"
+                                          Grid.Column="1"
+                                          Height="44"
+                                          Style="{StaticResource GlassComboBoxStyle}"
+                                          SelectionChanged="EffectCombo_SelectionChanged"/>
                             </Grid>
 
-                            <Grid Grid.Row="2" Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <StackPanel Margin="0,0,8,0">
+                            <Grid Grid.Row="2" Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,10,0">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="PRIMARY"/>
-                                    <Button x:Name="PrimaryColorButton" Style="{StaticResource GlassButtonStyle}" Height="44" Click="PrimaryColorButton_Click"/>
+                                    <Button x:Name="PrimaryColorButton"
+                                            Height="48"
+                                            Style="{StaticResource GlassButtonStyle}"
+                                            Click="PrimaryColorButton_Click"/>
                                 </StackPanel>
-                                <StackPanel x:Name="SecondaryPanel" Grid.Column="1" Margin="8,0,0,0">
+                                <StackPanel x:Name="SecondaryPanel" Grid.Column="1" Margin="10,0,0,0">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="SECONDARY"/>
-                                    <Button x:Name="SecondaryColorButton" Style="{StaticResource GlassButtonStyle}" Height="44" Click="SecondaryColorButton_Click"/>
+                                    <Button x:Name="SecondaryColorButton"
+                                            Height="48"
+                                            Style="{StaticResource GlassButtonStyle}"
+                                            Click="SecondaryColorButton_Click"/>
                                 </StackPanel>
                             </Grid>
 
-                            <Grid Grid.Row="3" Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="EFFECT SPEED"/>
-                                <Slider x:Name="SpeedSlider" Grid.Column="1" Minimum="0" Maximum="100" ValueChanged="SpeedSlider_ValueChanged"/>
-                                <TextBlock x:Name="SpeedValueText" Grid.Column="2" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                            <Grid Grid.Row="3" Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource FieldLabelStyle}"
+                                           Width="86"
+                                           VerticalAlignment="Center"
+                                           Text="SPEED"/>
+                                <Slider x:Name="SpeedSlider"
+                                        Grid.Column="1"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        ValueChanged="SpeedSlider_ValueChanged"/>
+                                <TextBlock x:Name="SpeedValueText"
+                                           Grid.Column="2"
+                                           Margin="12,0,0,0"
+                                           Foreground="{StaticResource AccentBrush}"
+                                           FontFamily="Segoe UI Variable Display"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
                             </Grid>
 
-                            <Grid Grid.Row="4" Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="BRIGHTNESS"/>
-                                <Slider x:Name="BrightnessSlider" Grid.Column="1" Minimum="0" Maximum="100" ValueChanged="BrightnessSlider_ValueChanged"/>
-                                <TextBlock x:Name="BrightnessValueText" Grid.Column="2" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                            <Grid Grid.Row="4" Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource FieldLabelStyle}"
+                                           Width="86"
+                                           VerticalAlignment="Center"
+                                           Text="BRIGHT"/>
+                                <Slider x:Name="BrightnessSlider"
+                                        Grid.Column="1"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        ValueChanged="BrightnessSlider_ValueChanged"/>
+                                <TextBlock x:Name="BrightnessValueText"
+                                           Grid.Column="2"
+                                           Margin="12,0,0,0"
+                                           Foreground="{StaticResource AccentBrush}"
+                                           FontFamily="Segoe UI Variable Display"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
                             </Grid>
 
-                            <Border Grid.Row="5" Background="#44202A38" CornerRadius="18" Padding="14">
+                            <Border Grid.Row="5"
+                                    Padding="14"
+                                    CornerRadius="18"
+                                    Background="#45202A38"
+                                    BorderBrush="#39516F95"
+                                    BorderThickness="1">
                                 <StackPanel>
-                                    <CheckBox x:Name="KeepAliveCheck" Foreground="{StaticResource TextBrush}" Margin="0,0,0,8" Checked="SettingChanged" Unchecked="SettingChanged" Content="Maintain keyboard state"/>
-                                    <CheckBox x:Name="EnabledCheck" Foreground="{StaticResource TextBrush}" Checked="SettingChanged" Unchecked="SettingChanged" Content="Lights enabled"/>
-                                    <Button x:Name="ApplyLightingButton" Margin="0,16,0,0" Height="56" Style="{StaticResource PrimaryButtonStyle}" Click="ApplyLightingButton_Click" Content="APPLY LIGHTING"/>
+                                    <CheckBox x:Name="KeepAliveCheck"
+                                              Foreground="{StaticResource TextBrush}"
+                                              Margin="0,0,0,8"
+                                              Checked="SettingChanged"
+                                              Unchecked="SettingChanged"
+                                              Content="Maintain keyboard state"/>
+                                    <CheckBox x:Name="EnabledCheck"
+                                              Foreground="{StaticResource TextBrush}"
+                                              Checked="SettingChanged"
+                                              Unchecked="SettingChanged"
+                                              Content="Lights enabled"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
                     </Border>
 
-                    <Border Grid.Row="1" Style="{StaticResource GlassCardStyle}" Padding="22" Margin="0,0,0,14">
+                    <Border Grid.Row="1" Style="{StaticResource GlassCardStyle}" Padding="22" Margin="0,0,0,16">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Thermals"/>
-                            <TextBlock Style="{StaticResource SectionHintStyle}" Margin="0,6,0,14" Text="Use BIOS/AUTO to hand control back. MAX pushes the detected fans to full raw boost."/>
-                            <TextBlock x:Name="FanModeText" Foreground="{StaticResource TextBrush}" FontFamily="Bahnschrift SemiBold"/>
-                            <TextBlock x:Name="FanRpmText" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,16"/>
+                            <TextBlock Style="{StaticResource SectionHintStyle}"
+                                       Margin="0,6,0,14"
+                                       Text="Use BIOS / AUTO to hand control back. MAX pushes the detected fans to full raw boost."/>
+                            <TextBlock x:Name="FanModeText"
+                                       Foreground="{StaticResource TextBrush}"
+                                       FontFamily="Segoe UI Variable Display"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock x:Name="FanRpmText"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       Margin="0,6,0,16"/>
                             <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <Button x:Name="FanAutoButton" Style="{StaticResource GlassButtonStyle}" Margin="0,0,8,0" Click="FanAutoButton_Click" Content="BIOS / AUTO"/>
-                                <Button x:Name="FanMaxButton" Grid.Column="1" Style="{StaticResource PrimaryButtonStyle}" Margin="8,0,0,0" Click="FanMaxButton_Click" Content="MAX"/>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="FanAutoButton"
+                                        Margin="0,0,8,0"
+                                        Style="{StaticResource GlassButtonStyle}"
+                                        Click="FanAutoButton_Click"
+                                        Content="BIOS / AUTO"/>
+                                <Button x:Name="FanMaxButton"
+                                        Grid.Column="1"
+                                        Margin="8,0,0,0"
+                                        Style="{StaticResource PrimaryActionButtonStyle}"
+                                        Click="FanMaxButton_Click"
+                                        Content="MAX"/>
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -299,18 +687,51 @@
                     <Border Grid.Row="2" Style="{StaticResource GlassCardStyle}" Padding="22">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Live State"/>
-                            <TextBlock x:Name="PendingText" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,10" TextWrapping="Wrap"/>
-                            <TextBlock x:Name="FanHintText" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="PendingText"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       Margin="0,10,0,10"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock x:Name="FanHintText"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
                 </Grid>
             </Grid>
 
-            <TextBlock Grid.Row="2"
-                       Margin="0,16,0,0"
-                       Foreground="{StaticResource MutedBrush}"
-                       Text="If a zone still blinks white after apply, the keyboard firmware is still replaying a conflicting raw light state."
-                       TextWrapping="Wrap"/>
+            <Button x:Name="ApplyLightingButton"
+                    Grid.Row="2"
+                    Height="84"
+                    Margin="0,16,0,0"
+                    Style="{StaticResource PrimaryActionButtonStyle}"
+                    Click="ApplyLightingButton_Click">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock x:Name="ApplyButtonTitleText"
+                                   FontFamily="Segoe UI Variable Display"
+                                   FontWeight="SemiBold"
+                                   FontSize="18"
+                                   Text="Apply Lighting"/>
+                        <TextBlock x:Name="ApplyButtonHintText"
+                                   Margin="0,4,0,0"
+                                   FontSize="12"
+                                   Foreground="#D5091922"
+                                   TextWrapping="Wrap"
+                                   Text="Commit the current deck to the keyboard and broker state."/>
+                    </StackPanel>
+                    <TextBlock Grid.Column="1"
+                               Margin="18,0,0,0"
+                               VerticalAlignment="Center"
+                               FontFamily="Consolas"
+                               FontSize="26"
+                               FontWeight="Bold"
+                               Text="&gt;"/>
+                </Grid>
+            </Button>
         </Grid>
     </Grid>
 </Window>

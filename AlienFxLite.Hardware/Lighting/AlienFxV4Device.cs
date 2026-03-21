@@ -152,6 +152,9 @@ internal sealed class AlienFxV4Device : IDisposable
         return PrepareAndSend(CommandControl, [new CommandMod(4, [6, 0, blockId])], out error);
     }
 
+    public bool SetStartupLightingBlock(byte blockId, out string? error) =>
+        PrepareAndSend(CommandControl, [new CommandMod(4, [7, 0, blockId])], out error);
+
     public bool UpdateColors(out string? error) =>
         PrepareAndSend(CommandControl, [], out error);
 
