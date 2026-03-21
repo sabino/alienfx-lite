@@ -430,7 +430,8 @@
 
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Keyboard Deck"/>
-                            <TextBlock Style="{StaticResource SectionHintStyle}"
+                            <TextBlock x:Name="KeyboardDeckDescriptionText"
+                                       Style="{StaticResource SectionHintStyle}"
                                        Margin="0,6,0,0"
                                        Text="This deck mirrors the 20 x 6 AlienFX keyboard grid. Click any lit region or use the zone chips below."/>
                         </StackPanel>
@@ -494,28 +495,7 @@
                             </Grid>
                         </Border>
 
-                        <WrapPanel Grid.Row="2" Margin="0,0,0,6">
-                            <primitives:ToggleButton x:Name="LeftZoneButton"
-                                                     Style="{StaticResource ZoneChipStyle}"
-                                                     Content="KB Left"
-                                                     Checked="ZoneButton_Changed"
-                                                     Unchecked="ZoneButton_Changed"/>
-                            <primitives:ToggleButton x:Name="CenterZoneButton"
-                                                     Style="{StaticResource ZoneChipStyle}"
-                                                     Content="KB Center"
-                                                     Checked="ZoneButton_Changed"
-                                                     Unchecked="ZoneButton_Changed"/>
-                            <primitives:ToggleButton x:Name="RightZoneButton"
-                                                     Style="{StaticResource ZoneChipStyle}"
-                                                     Content="KB Right"
-                                                     Checked="ZoneButton_Changed"
-                                                     Unchecked="ZoneButton_Changed"/>
-                            <primitives:ToggleButton x:Name="NumPadZoneButton"
-                                                     Style="{StaticResource ZoneChipStyle}"
-                                                     Content="KB NumPad"
-                                                     Checked="ZoneButton_Changed"
-                                                     Unchecked="ZoneButton_Changed"/>
-                        </WrapPanel>
+                        <WrapPanel x:Name="ZoneChipPanel" Grid.Row="2" Margin="0,0,0,6"/>
 
                         <TextBlock x:Name="LightingHintText"
                                    Grid.Row="3"

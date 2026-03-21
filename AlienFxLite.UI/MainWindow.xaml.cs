@@ -24,58 +24,19 @@ public partial class MainWindow : Window
     private static readonly MediaColor AccentStrong = MediaColor.FromRgb(124, 255, 228);
     private static readonly MediaColor Danger = MediaColor.FromRgb(255, 122, 156);
 
-    private static readonly IReadOnlyDictionary<LightingZone, string> ZoneNames = new Dictionary<LightingZone, string>
-    {
-        [LightingZone.KbLeft] = "KB Left",
-        [LightingZone.KbCenter] = "KB Center",
-        [LightingZone.KbRight] = "KB Right",
-        [LightingZone.KbNumPad] = "KB NumPad",
-    };
-
-    private static readonly LightingZone?[] KeyboardDeck =
-    [
-        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
-        LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
-        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
-        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
-
-        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
-        LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
-        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
-        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
-
-        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
-        LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
-        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
-        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
-
-        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
-        LightingZone.KbCenter, LightingZone.KbCenter, null, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
-        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
-        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
-
-        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
-        LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
-        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
-        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
-
-        LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft, LightingZone.KbLeft,
-        LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter, LightingZone.KbCenter,
-        LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight, LightingZone.KbRight,
-        LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad, LightingZone.KbNumPad,
-    ];
-
     private readonly AlienFxLiteServiceClient _client = new();
     private readonly DesktopSettingsStore _desktopSettingsStore = new();
     private readonly GitHubReleaseUpdateService _updateService = new();
     private readonly AppLaunchOptions _launchOptions;
     private readonly WinForms.ColorDialog _colorDialog = new() { FullOpen = true };
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(5) };
-    private readonly Dictionary<LightingZone, ToggleButton> _zoneButtons;
+    private readonly Dictionary<int, ToggleButton> _zoneButtons = [];
     private readonly List<KeyCapCell> _keyboardCells = [];
+    private readonly HashSet<int> _selectedZoneIds = [];
     private readonly WinForms.NotifyIcon _notifyIcon;
 
     private DesktopSettings _desktopSettings;
+    private LightingDeviceProfile? _lightingProfile;
     private DrawingColor _primaryColor = DrawingColor.White;
     private DrawingColor _secondaryColor = DrawingColor.Black;
     private bool _refreshing;
@@ -112,22 +73,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _notifyIcon = CreateNotifyIcon();
 
-        _zoneButtons = new Dictionary<LightingZone, ToggleButton>
-        {
-            [LightingZone.KbLeft] = LeftZoneButton,
-            [LightingZone.KbCenter] = CenterZoneButton,
-            [LightingZone.KbRight] = RightZoneButton,
-            [LightingZone.KbNumPad] = NumPadZoneButton,
-        };
-
-        BuildKeyboardDeck();
-
         _loadingLightingState = true;
-        foreach (ToggleButton zoneButton in _zoneButtons.Values)
-        {
-            zoneButton.IsChecked = true;
-        }
-
         EffectCombo.ItemsSource = Enum.GetValues<LightingEffect>();
         EffectCombo.SelectedItem = LightingEffect.Static;
         SpeedSlider.Value = 50;
@@ -149,6 +95,7 @@ public partial class MainWindow : Window
         UpdateApplyButtonState();
         UpdateDesktopStatus();
         UpdateUpdateUi();
+        RebuildZoneChipsAndDeck(null, preserveSelection: false);
         RefreshKeyboardPreview();
         UpdateTrayVisibility();
 
@@ -191,8 +138,8 @@ public partial class MainWindow : Window
     {
         try
         {
-            List<LightingZone> zones = _zoneButtons.Where(pair => pair.Value.IsChecked == true).Select(pair => pair.Key).ToList();
-            if (zones.Count == 0)
+            List<int> zoneIds = GetSelectedZoneIds().ToList();
+            if (zoneIds.Count == 0)
             {
                 WpfMessageBox.Show(this, "Select at least one keyboard zone.", "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -200,7 +147,7 @@ public partial class MainWindow : Window
 
             LightingEffect effect = (LightingEffect)(EffectCombo.SelectedItem ?? LightingEffect.Static);
             SetLightingStateRequest request = new(
-                zones,
+                zoneIds,
                 effect,
                 ToRgb(_primaryColor),
                 effect == LightingEffect.Morph ? ToRgb(_secondaryColor) : null,
@@ -250,7 +197,22 @@ public partial class MainWindow : Window
 
     private void SettingChanged(object sender, RoutedEventArgs e) => MarkLightingDirty();
 
-    private void ZoneButton_Changed(object sender, RoutedEventArgs e) => MarkLightingDirty();
+    private void ZoneButton_Changed(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToggleButton { Tag: int zoneId })
+        {
+            if (((ToggleButton)sender).IsChecked == true)
+            {
+                _selectedZoneIds.Add(zoneId);
+            }
+            else
+            {
+                _selectedZoneIds.Remove(zoneId);
+            }
+        }
+
+        MarkLightingDirty();
+    }
 
     private void DesktopSettingChanged(object sender, RoutedEventArgs e)
     {
@@ -378,12 +340,16 @@ public partial class MainWindow : Window
     {
         ServiceStatusText.Text = "Broker connected";
         ServiceStatusText.Foreground = new SolidColorBrush(AccentStrong);
-        DeviceStatusText.Text = $"Lighting: {(status.Devices.LightingAvailable ? "online" : "offline")}  |  Fans: {(status.Devices.FanAvailable ? "online" : "offline")}";
+        DeviceStatusText.Text = status.Devices.LightingProfile is null
+            ? $"Lighting: {(status.Devices.LightingAvailable ? "online" : "offline")}  |  Fans: {(status.Devices.FanAvailable ? "online" : "offline")}"
+            : $"{status.Devices.LightingProfile.DisplayName}  |  Fans: {(status.Devices.FanAvailable ? "online" : "offline")}";
         FanModeText.Text = $"Mode: {status.Fan.Mode}";
         FanRpmText.Text = status.Fan.Rpm.Count > 0
             ? $"RPM: {string.Join(" / ", status.Fan.Rpm)}"
             : $"RPM: n/a ({status.Fan.Message})";
         FanHintText.Text = status.Fan.Message;
+
+        RebuildZoneChipsAndDeck(status.Devices.LightingProfile, preservePendingLighting && _lightingDirty);
 
         if (!preservePendingLighting)
         {
@@ -394,7 +360,7 @@ public partial class MainWindow : Window
                 KeepAliveCheck.IsChecked = status.Lighting.KeepAlive;
                 EnabledCheck.IsChecked = status.Lighting.Enabled;
 
-                ZoneLightingState? reference = status.Lighting.ZoneStates.OrderBy(static zone => zone.Zone).FirstOrDefault();
+                ZoneLightingState? reference = status.Lighting.ZoneStates.OrderBy(static zone => zone.ZoneId).FirstOrDefault();
                 if (reference is not null)
                 {
                     EffectCombo.SelectedItem = reference.Effect;
@@ -405,13 +371,20 @@ public partial class MainWindow : Window
                     UpdateColorButton(SecondaryColorButton, _secondaryColor);
                 }
 
-                HashSet<LightingZone> activeZones = status.Lighting.ZoneStates
+                HashSet<int> activeZones = status.Lighting.ZoneStates
                     .Where(static zone => zone.Enabled)
-                    .Select(static zone => zone.Zone)
+                    .Select(static zone => zone.ZoneId)
                     .ToHashSet();
-                foreach ((LightingZone zone, ToggleButton toggle) in _zoneButtons)
+
+                _selectedZoneIds.Clear();
+                foreach ((int zoneId, ToggleButton toggle) in _zoneButtons)
                 {
-                    toggle.IsChecked = activeZones.Contains(zone);
+                    bool active = activeZones.Contains(zoneId);
+                    toggle.IsChecked = active;
+                    if (active)
+                    {
+                        _selectedZoneIds.Add(zoneId);
+                    }
                 }
             }
             finally
@@ -428,12 +401,58 @@ public partial class MainWindow : Window
         RefreshKeyboardPreview();
     }
 
-    private void BuildKeyboardDeck()
+    private void RebuildZoneChipsAndDeck(LightingDeviceProfile? profile, bool preserveSelection)
     {
+        bool profileChanged = !string.Equals(_lightingProfile?.DeviceKey, profile?.DeviceKey, StringComparison.OrdinalIgnoreCase);
+        _lightingProfile = profile;
+
+        if (!preserveSelection || profileChanged)
+        {
+            _selectedZoneIds.Clear();
+            if (profile is not null)
+            {
+                foreach (LightingZoneDefinition zone in profile.Zones)
+                {
+                    _selectedZoneIds.Add(zone.ZoneId);
+                }
+            }
+        }
+
+        ZoneChipPanel.Children.Clear();
+        _zoneButtons.Clear();
+
+        foreach (LightingZoneDefinition zone in profile?.Zones ?? [])
+        {
+            ToggleButton chip = new()
+            {
+                Tag = zone.ZoneId,
+                Content = zone.Name,
+                Style = (Style)FindResource("ZoneChipStyle"),
+                IsChecked = _selectedZoneIds.Contains(zone.ZoneId),
+            };
+
+            chip.Checked += ZoneButton_Changed;
+            chip.Unchecked += ZoneButton_Changed;
+            ZoneChipPanel.Children.Add(chip);
+            _zoneButtons[zone.ZoneId] = chip;
+        }
+
+        BuildKeyboardDeck(profile);
+    }
+
+    private void BuildKeyboardDeck(LightingDeviceProfile? profile)
+    {
+        KeyboardDeckDescriptionText.Text = profile?.PreviewGrid is not null
+            ? $"This deck mirrors the mapped '{profile.PreviewGrid.Name}' surface. Click any lit region or use the zone chips below."
+            : "This deck previews the currently detected AlienFX zones. Click any lit region or use the zone chips below.";
+
         KeyboardMatrixPanel.Children.Clear();
         _keyboardCells.Clear();
+        IReadOnlyList<int?> layoutCells = BuildDeckCells(profile, out int columns, out int rows);
+        KeyboardMatrixPanel.Columns = Math.Max(columns, 1);
+        KeyboardMatrixPanel.Rows = Math.Max(rows, 1);
 
-        foreach (LightingZone? zone in KeyboardDeck)
+        foreach (int? zoneId in layoutCells)
         {
             Border keyCap = new()
             {
@@ -443,7 +462,7 @@ public partial class MainWindow : Window
                 MinHeight = 22,
             };
 
-            if (zone is null)
+            if (zoneId is null)
             {
                 keyCap.Opacity = 0;
                 keyCap.IsHitTestVisible = false;
@@ -451,22 +470,22 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            keyCap.Tag = zone.Value;
+            keyCap.Tag = zoneId.Value;
             keyCap.Cursor = WpfCursors.Hand;
             keyCap.MouseLeftButtonUp += KeyboardCell_MouseLeftButtonUp;
             KeyboardMatrixPanel.Children.Add(keyCap);
-            _keyboardCells.Add(new KeyCapCell(zone.Value, keyCap));
+            _keyboardCells.Add(new KeyCapCell(zoneId.Value, keyCap));
         }
     }
 
     private void KeyboardCell_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not Border { Tag: LightingZone zone })
+        if (sender is not Border { Tag: int zoneId } || !_zoneButtons.TryGetValue(zoneId, out ToggleButton? zoneButton))
         {
             return;
         }
 
-        _zoneButtons[zone].IsChecked = _zoneButtons[zone].IsChecked != true;
+        zoneButton.IsChecked = zoneButton.IsChecked != true;
         e.Handled = true;
     }
 
@@ -540,7 +559,7 @@ public partial class MainWindow : Window
 
         foreach (KeyCapCell cell in _keyboardCells)
         {
-            bool selected = _zoneButtons[cell.Zone].IsChecked == true;
+            bool selected = _zoneButtons.TryGetValue(cell.ZoneId, out ToggleButton? toggle) && toggle.IsChecked == true;
             cell.Element.Background = BuildKeyBrush(selected, enabled, effect, primary, secondary);
             cell.Element.BorderBrush = new SolidColorBrush(selected
                 ? WithAlpha(Lighten(primary, enabled ? 0.22 : 0.08), enabled ? (byte)230 : (byte)110)
@@ -548,7 +567,7 @@ public partial class MainWindow : Window
             cell.Element.Opacity = selected ? (enabled ? 1 : 0.74) : 0.94;
         }
 
-        string selectedZones = string.Join(", ", _zoneButtons.Where(pair => pair.Value.IsChecked == true).Select(pair => ZoneNames[pair.Key]));
+        string selectedZones = string.Join(", ", GetSelectedZoneIds().Select(GetZoneName));
         if (string.IsNullOrWhiteSpace(selectedZones))
         {
             selectedZones = "No zones selected";
@@ -556,6 +575,48 @@ public partial class MainWindow : Window
 
         LightingHintText.Text =
             $"Selected: {selectedZones}  |  Effect: {EffectCombo.SelectedItem}  |  Brightness: {(int)BrightnessSlider.Value}%  |  KeepAlive: {(KeepAliveCheck.IsChecked == true ? "on" : "off")}";
+    }
+
+    private IReadOnlyList<int> GetSelectedZoneIds() =>
+        _zoneButtons
+            .Where(pair => pair.Value.IsChecked == true)
+            .Select(pair => pair.Key)
+            .OrderBy(static zoneId => zoneId)
+            .ToArray();
+
+    private string GetZoneName(int zoneId) =>
+        _lightingProfile?.Zones.FirstOrDefault(zone => zone.ZoneId == zoneId)?.Name
+        ?? $"Zone {zoneId}";
+
+    private static IReadOnlyList<int?> BuildDeckCells(LightingDeviceProfile? profile, out int columns, out int rows)
+    {
+        if (profile?.PreviewGrid is { } previewGrid &&
+            previewGrid.Columns > 0 &&
+            previewGrid.Rows > 0 &&
+            previewGrid.Cells.Count == previewGrid.Columns * previewGrid.Rows)
+        {
+            columns = previewGrid.Columns;
+            rows = previewGrid.Rows;
+            return previewGrid.Cells;
+        }
+
+        IReadOnlyList<LightingZoneDefinition> zones = profile?.Zones ?? [];
+        if (zones.Count == 0)
+        {
+            columns = 1;
+            rows = 1;
+            return [null];
+        }
+
+        columns = Math.Min(Math.Max(zones.Count, 1), 4);
+        rows = (int)Math.Ceiling(zones.Count / (double)columns);
+        int?[] cells = new int?[rows * columns];
+        for (int index = 0; index < zones.Count && index < cells.Length; index++)
+        {
+            cells[index] = zones[index].ZoneId;
+        }
+
+        return cells;
     }
 
     private void ApplyDesktopSettingsToControls(DesktopSettings settings)
@@ -863,5 +924,5 @@ public partial class MainWindow : Window
 
     private static DrawingColor FromRgb(RgbColor color) => DrawingColor.FromArgb(color.R, color.G, color.B);
 
-    private sealed record KeyCapCell(LightingZone Zone, Border Element);
+    private sealed record KeyCapCell(int ZoneId, Border Element);
 }

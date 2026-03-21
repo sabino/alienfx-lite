@@ -47,6 +47,7 @@ internal sealed class BrokerRuntime : IDisposable
         PersistedStateFile persistedState = _stateStore.Load();
         _lightingState = persistedState.Lighting;
         _fanState = persistedState.Fan;
+        EnsureLightingProfileState();
 
         _cts = new CancellationTokenSource();
 
@@ -172,6 +173,7 @@ internal sealed class BrokerRuntime : IDisposable
             {
                 if (_lightingState.KeepAlive)
                 {
+                    EnsureLightingProfileState();
                     MaintainLightingCore();
                 }
                 else
@@ -221,18 +223,24 @@ internal sealed class BrokerRuntime : IDisposable
     private ServiceResponse HandleSetLightingState(ServiceRequest request)
     {
         SetLightingStateRequest payload = ServiceJson.Deserialize<SetLightingStateRequest>(request.Payload);
-        if (payload.Zones is null || payload.Zones.Count == 0)
+        if (payload.ZoneIds is null || payload.ZoneIds.Count == 0)
         {
             return Error(request.RequestId, ServiceResponseCodes.InvalidRequest, "At least one lighting zone must be selected.", _lightingState);
         }
 
         lock (_sync)
         {
-            Dictionary<LightingZone, ZoneLightingState> zones = _lightingState.ZoneStates.ToDictionary(state => state.Zone);
-            foreach (LightingZone zone in payload.Zones.Distinct())
+            EnsureLightingProfileState();
+            if (_lightingController.CurrentProfile is null)
             {
-                zones[zone] = new ZoneLightingState(
-                    zone,
+                return Error(request.RequestId, ServiceResponseCodes.HardwareUnavailable, _lastLightingError ?? "Lighting device unavailable.", _lightingState);
+            }
+
+            Dictionary<int, ZoneLightingState> zones = _lightingState.ZoneStates.ToDictionary(state => state.ZoneId);
+            foreach (int zoneId in payload.ZoneIds.Distinct())
+            {
+                zones[zoneId] = new ZoneLightingState(
+                    zoneId,
                     payload.Effect,
                     payload.PrimaryColor,
                     payload.SecondaryColor,
@@ -244,7 +252,8 @@ internal sealed class BrokerRuntime : IDisposable
                 payload.Enabled ?? _lightingState.Enabled,
                 payload.Brightness ?? _lightingState.Brightness,
                 payload.KeepAlive ?? _lightingState.KeepAlive,
-                zones.Values.OrderBy(static state => state.Zone).ToArray());
+                _lightingController.CurrentProfile.DeviceKey,
+                zones.Values.OrderBy(static state => state.ZoneId).ToArray());
 
             SaveState();
             if (!ApplyLightingCore())
@@ -309,6 +318,7 @@ internal sealed class BrokerRuntime : IDisposable
         _diagnostics.Info($"Restoring persisted hardware state after {reason}.");
         lock (_sync)
         {
+            EnsureLightingProfileState();
             ApplyLightingCore();
             ApplyFanCore();
         }
@@ -316,6 +326,7 @@ internal sealed class BrokerRuntime : IDisposable
 
     private bool ApplyLightingCore()
     {
+        EnsureLightingProfileState();
         if (_lightingController.Apply(_lightingState, out string? error))
         {
             _lastLightingError = null;
@@ -333,6 +344,7 @@ internal sealed class BrokerRuntime : IDisposable
 
     private bool MaintainLightingCore()
     {
+        EnsureLightingProfileState();
         if (_lightingController.Maintain(_lightingState, out string? error) ||
             _lightingController.Apply(_lightingState, out error))
         {
@@ -377,6 +389,7 @@ internal sealed class BrokerRuntime : IDisposable
     {
         lock (_sync)
         {
+            EnsureLightingProfileState();
             return new StatusSnapshot(_lightingState, BuildFanStatus(), BuildDeviceStatus());
         }
     }
@@ -416,8 +429,9 @@ internal sealed class BrokerRuntime : IDisposable
             _lightingController.IsAvailable,
             _fanController.IsAvailable,
             _lightingController.DeviceDescription,
-            _lightingController.IsAvailable ? "AlienFX API v4" : null,
-            _fanController.IsAvailable ? "AWCCWmiMethodFunction" : null);
+            _lightingController.CurrentProfile?.Protocol,
+            _fanController.IsAvailable ? "AWCCWmiMethodFunction" : null,
+            _lightingController.CurrentProfile);
 
     private NamedPipeServerStream CreatePipeServer()
     {
@@ -464,4 +478,41 @@ internal sealed class BrokerRuntime : IDisposable
 
     private static string GetServiceVersion() =>
         Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.1.0";
+
+    private void EnsureLightingProfileState()
+    {
+        _lightingController.Probe(out _lastLightingError);
+        LightingDeviceProfile? profile = _lightingController.CurrentProfile;
+        if (profile is null)
+        {
+            return;
+        }
+
+        HashSet<int> expectedZoneIds = profile.Zones.Select(static zone => zone.ZoneId).ToHashSet();
+        bool needsReset = !string.Equals(_lightingState.DeviceKey, profile.DeviceKey, StringComparison.OrdinalIgnoreCase) ||
+                          _lightingState.ZoneStates.Any(zone => !expectedZoneIds.Contains(zone.ZoneId)) ||
+                          expectedZoneIds.Except(_lightingState.ZoneStates.Select(static zone => zone.ZoneId)).Any();
+
+        if (!needsReset)
+        {
+            return;
+        }
+
+        Dictionary<int, ZoneLightingState> previousZones = _lightingState.ZoneStates.ToDictionary(zone => zone.ZoneId);
+        List<ZoneLightingState> nextZones = profile.Zones
+            .Select(zone => previousZones.TryGetValue(zone.ZoneId, out ZoneLightingState? state)
+                ? state with { ZoneId = zone.ZoneId }
+                : new ZoneLightingState(zone.ZoneId, LightingEffect.Static, new RgbColor(255, 255, 255), null, 50, true))
+            .OrderBy(static zone => zone.ZoneId)
+            .ToList();
+
+        _lightingState = new LightingSnapshot(
+            _lightingState.Enabled,
+            _lightingState.Brightness,
+            _lightingState.KeepAlive,
+            profile.DeviceKey,
+            nextZones);
+
+        SaveState();
+    }
 }

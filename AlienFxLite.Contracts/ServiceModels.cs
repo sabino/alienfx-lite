@@ -2,14 +2,6 @@ using System.Text.Json;
 
 namespace AlienFxLite.Contracts;
 
-public enum LightingZone
-{
-    KbLeft = 0,
-    KbCenter = 1,
-    KbRight = 2,
-    KbNumPad = 3,
-}
-
 public enum LightingEffect
 {
     Static = 0,
@@ -43,8 +35,31 @@ public static class ServiceResponseCodes
 
 public readonly record struct RgbColor(byte R, byte G, byte B);
 
+public sealed record LightingZoneDefinition(
+    int ZoneId,
+    string Name,
+    bool IsPowerOrIndicator,
+    IReadOnlyList<byte> LightIds);
+
+public sealed record LightingGridDefinition(
+    int GridId,
+    string Name,
+    int Columns,
+    int Rows,
+    IReadOnlyList<int?> Cells);
+
+public sealed record LightingDeviceProfile(
+    string DeviceKey,
+    string DisplayName,
+    ushort VendorId,
+    ushort ProductId,
+    string SurfaceName,
+    string Protocol,
+    IReadOnlyList<LightingZoneDefinition> Zones,
+    LightingGridDefinition? PreviewGrid);
+
 public sealed record ZoneLightingState(
-    LightingZone Zone,
+    int ZoneId,
     LightingEffect Effect,
     RgbColor PrimaryColor,
     RgbColor? SecondaryColor,
@@ -55,10 +70,11 @@ public sealed record LightingSnapshot(
     bool Enabled,
     int Brightness,
     bool KeepAlive,
+    string? DeviceKey,
     IReadOnlyList<ZoneLightingState> ZoneStates);
 
 public sealed record SetLightingStateRequest(
-    IReadOnlyList<LightingZone> Zones,
+    IReadOnlyList<int> ZoneIds,
     LightingEffect Effect,
     RgbColor PrimaryColor,
     RgbColor? SecondaryColor,
@@ -84,7 +100,8 @@ public sealed record DeviceStatus(
     bool FanAvailable,
     string? LightingDevice,
     string? LightingProtocol,
-    string? FanProvider);
+    string? FanProvider,
+    LightingDeviceProfile? LightingProfile);
 
 public sealed record StatusSnapshot(
     LightingSnapshot Lighting,

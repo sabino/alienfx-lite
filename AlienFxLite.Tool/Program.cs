@@ -60,11 +60,13 @@ internal static class Program
 
         if (args.Length >= 2 && args[0].Equals("lights", StringComparison.OrdinalIgnoreCase) && args[1].Equals("apply", StringComparison.OrdinalIgnoreCase))
         {
-            SetLightingStateRequest request = ParseLightApplyRequest(args.Skip(2).ToArray());
+            StatusSnapshot currentStatus = await client.GetStatusAsync().ConfigureAwait(false);
+            SetLightingStateRequest request = ParseLightApplyRequest(args.Skip(2).ToArray(), currentStatus.Devices.LightingProfile);
             LightingSnapshot snapshot = await client.SetLightingStateAsync(request).ConfigureAwait(false);
             Console.WriteLine($"Brightness: {snapshot.Brightness}");
             Console.WriteLine($"KeepAlive:  {snapshot.KeepAlive}");
-            Console.WriteLine($"Zones:      {string.Join(", ", snapshot.ZoneStates.Select(static zone => zone.Zone))}");
+            Console.WriteLine($"Device:     {snapshot.DeviceKey ?? "n/a"}");
+            Console.WriteLine($"Zones:      {string.Join(", ", snapshot.ZoneStates.Select(static zone => zone.ZoneId))}");
             return 0;
         }
 
@@ -72,7 +74,7 @@ internal static class Program
         return 1;
     }
 
-    private static SetLightingStateRequest ParseLightApplyRequest(string[] args)
+    private static SetLightingStateRequest ParseLightApplyRequest(string[] args, LightingDeviceProfile? profile)
     {
         Dictionary<string, string> options = new(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < args.Length; i += 2)
@@ -88,6 +90,11 @@ internal static class Program
         if (!options.TryGetValue("--zones", out string? zonesValue) || string.IsNullOrWhiteSpace(zonesValue))
         {
             throw new InvalidOperationException("--zones is required.");
+        }
+
+        if (profile is null)
+        {
+            throw new InvalidOperationException("No active lighting profile is available.");
         }
 
         if (!options.TryGetValue("--effect", out string? effectValue) || string.IsNullOrWhiteSpace(effectValue))
@@ -109,23 +116,31 @@ internal static class Program
         bool? keepAlive = options.TryGetValue("--keepalive", out string? keepAliveValue) ? bool.Parse(keepAliveValue) : null;
         bool? enabled = options.TryGetValue("--enabled", out string? enabledValue) ? bool.Parse(enabledValue) : null;
 
-        List<LightingZone> zones = zonesValue
+        List<int> zoneIds = zonesValue
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(ParseZone)
+            .Select(zone => ParseZone(zone, profile))
             .ToList();
 
-        return new SetLightingStateRequest(zones, effect, primary, secondary, speed, brightness, keepAlive, enabled);
+        return new SetLightingStateRequest(zoneIds, effect, primary, secondary, speed, brightness, keepAlive, enabled);
     }
 
-    private static LightingZone ParseZone(string value) =>
-        value.ToLowerInvariant() switch
+    private static int ParseZone(string value, LightingDeviceProfile profile)
+    {
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int zoneId) &&
+            profile.Zones.Any(zone => zone.ZoneId == zoneId))
         {
-            "left" or "kb-left" => LightingZone.KbLeft,
-            "center" or "kb-center" or "middle" => LightingZone.KbCenter,
-            "right" or "kb-right" => LightingZone.KbRight,
-            "numpad" or "kb-numpad" => LightingZone.KbNumPad,
-            _ => throw new InvalidOperationException($"Unknown zone '{value}'."),
-        };
+            return zoneId;
+        }
+
+        string normalized = NormalizeZoneToken(value);
+        LightingZoneDefinition? match = profile.Zones.FirstOrDefault(zone => NormalizeZoneToken(zone.Name) == normalized);
+        if (match is not null)
+        {
+            return match.ZoneId;
+        }
+
+        throw new InvalidOperationException($"Unknown zone '{value}'.");
+    }
 
     private static RgbColor ParseColor(string value)
     {
@@ -147,14 +162,28 @@ internal static class Program
         Console.WriteLine($"Brightness:       {status.Lighting.Brightness}");
         Console.WriteLine($"KeepAlive:        {status.Lighting.KeepAlive}");
         Console.WriteLine($"Lighting device:  {(status.Devices.LightingAvailable ? status.Devices.LightingDevice : "unavailable")}");
+        Console.WriteLine($"Lighting profile: {status.Devices.LightingProfile?.DisplayName ?? "unavailable"}");
         Console.WriteLine($"Fan provider:     {(status.Devices.FanAvailable ? status.Devices.FanProvider : "unavailable")}");
         Console.WriteLine($"Fan mode:         {status.Fan.Mode}");
         Console.WriteLine($"Fan RPM:          {(status.Fan.Rpm.Count > 0 ? string.Join(", ", status.Fan.Rpm) : "n/a")}");
         Console.WriteLine("Zones:");
-        foreach (ZoneLightingState zone in status.Lighting.ZoneStates.OrderBy(static item => item.Zone))
+        Dictionary<int, string> zoneNames = status.Devices.LightingProfile?.Zones.ToDictionary(zone => zone.ZoneId, zone => zone.Name)
+            ?? [];
+        foreach (ZoneLightingState zone in status.Lighting.ZoneStates.OrderBy(static item => item.ZoneId))
         {
-            Console.WriteLine($"  - {zone.Zone}: {zone.Effect} #{zone.PrimaryColor.R:X2}{zone.PrimaryColor.G:X2}{zone.PrimaryColor.B:X2}");
+            string zoneLabel = zoneNames.TryGetValue(zone.ZoneId, out string? name) ? $"{zone.ZoneId} ({name})" : zone.ZoneId.ToString(CultureInfo.InvariantCulture);
+            Console.WriteLine($"  - {zoneLabel}: {zone.Effect} #{zone.PrimaryColor.R:X2}{zone.PrimaryColor.G:X2}{zone.PrimaryColor.B:X2}");
         }
+    }
+
+    private static string NormalizeZoneToken(string value)
+    {
+        char[] chars = value
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant)
+            .ToArray();
+
+        return new string(chars);
     }
 
     private static void PrintUsage()
@@ -164,6 +193,6 @@ internal static class Program
         Console.WriteLine("  service ping");
         Console.WriteLine("  fans auto");
         Console.WriteLine("  fans max");
-        Console.WriteLine("  lights apply --zones left,center --effect static --primary FF5500 [--secondary 0000FF] [--speed 50] [--brightness 100] [--keepalive true]");
+        Console.WriteLine("  lights apply --zones 0,1 --effect static --primary FF5500 [--secondary 0000FF] [--speed 50] [--brightness 100] [--keepalive true]");
     }
 }

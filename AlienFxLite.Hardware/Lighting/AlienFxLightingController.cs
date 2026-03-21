@@ -1,25 +1,16 @@
 using AlienFxLite.Contracts;
+using AlienFxLite.Hardware.Hid;
 
 namespace AlienFxLite.Hardware.Lighting;
 
 public sealed class AlienFxLightingController : IDisposable
 {
-    private const ushort VendorId = 0x187C;
-    private const ushort ProductId = 0x0550;
     private const byte SavedLightingBlockId = 0x61;
 
-    private static readonly IReadOnlyDictionary<LightingZone, byte[]> ZoneLightIds = new Dictionary<LightingZone, byte[]>
-    {
-        [LightingZone.KbLeft] = [0, 1, 2, 12, 13, 14],
-        [LightingZone.KbCenter] = [3, 4, 5, 15, 16, 17],
-        [LightingZone.KbRight] = [6, 7, 8, 18, 19, 20],
-        [LightingZone.KbNumPad] = [9, 10, 11, 21, 22, 23],
-    };
-
-    private static readonly byte[] AllLightIds = ZoneLightIds.Values.SelectMany(static ids => ids).Distinct().ToArray();
-
     private readonly object _sync = new();
+    private readonly AlienFxMappingCatalog _catalog = AlienFxMappingCatalog.LoadDefault();
     private AlienFxV4Device? _device;
+    private LightingDeviceProfile? _profile;
 
     public bool IsAvailable
     {
@@ -27,7 +18,18 @@ public sealed class AlienFxLightingController : IDisposable
         {
             lock (_sync)
             {
-                return _device is not null;
+                return _device is not null && _profile is not null;
+            }
+        }
+    }
+
+    public LightingDeviceProfile? CurrentProfile
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _profile;
             }
         }
     }
@@ -38,7 +40,12 @@ public sealed class AlienFxLightingController : IDisposable
         {
             lock (_sync)
             {
-                return _device?.DevicePath;
+                if (_device is null || _profile is null)
+                {
+                    return null;
+                }
+
+                return $"{_profile.DisplayName} [{_device.DevicePath}]";
             }
         }
     }
@@ -97,7 +104,7 @@ public sealed class AlienFxLightingController : IDisposable
             return false;
         }
 
-        if (_device is null)
+        if (_device is null || _profile is null)
         {
             error = "Lighting device is unavailable.";
             return false;
@@ -108,40 +115,39 @@ public sealed class AlienFxLightingController : IDisposable
             return false;
         }
 
+        Dictionary<int, LightingZoneDefinition> zonesById = _profile.Zones.ToDictionary(zone => zone.ZoneId);
         bool needsUpdate = forceUpdate;
         foreach (IGrouping<RgbColor, ZoneLightingState> staticGroup in snapshot.ZoneStates
                      .Where(static state => state.Effect == LightingEffect.Static)
                      .GroupBy(static state => state.PrimaryColor))
         {
-            byte[] zoneIds = staticGroup
-                .SelectMany(static state => ZoneLightIds.TryGetValue(state.Zone, out byte[]? lightIds) ? lightIds : [])
+            byte[] lightIds = staticGroup
+                .SelectMany(zoneState => zonesById.TryGetValue(zoneState.ZoneId, out LightingZoneDefinition? zone)
+                    ? zone.LightIds
+                    : [])
                 .Distinct()
                 .ToArray();
 
-            if (zoneIds.Length == 0)
+            if (lightIds.Length == 0)
             {
                 continue;
             }
 
-            if (!_device.ApplyStaticZones(staticGroup.Key, zoneIds, out error))
+            if (!_device.ApplyStaticZones(staticGroup.Key, lightIds, out error))
             {
                 return false;
             }
         }
 
-        foreach (ZoneLightingState zoneState in snapshot.ZoneStates.OrderBy(static state => state.Zone))
+        foreach (ZoneLightingState zoneState in snapshot.ZoneStates.OrderBy(static state => state.ZoneId))
         {
-            if (zoneState.Effect == LightingEffect.Static)
+            if (zoneState.Effect == LightingEffect.Static ||
+                !zonesById.TryGetValue(zoneState.ZoneId, out LightingZoneDefinition? zoneDefinition))
             {
                 continue;
             }
 
-            if (!ZoneLightIds.TryGetValue(zoneState.Zone, out byte[]? lightIds))
-            {
-                continue;
-            }
-
-            foreach (byte lightId in lightIds)
+            foreach (byte lightId in zoneDefinition.LightIds)
             {
                 if (!_device.ApplyLight(zoneState, lightId, out error))
                 {
@@ -158,19 +164,45 @@ public sealed class AlienFxLightingController : IDisposable
         }
 
         int brightness = snapshot.Enabled ? snapshot.Brightness : 0;
-        return _device.SetBrightness(brightness, AllLightIds, out error);
+        byte[] allLightIds = _profile.Zones.SelectMany(static zone => zone.LightIds).Distinct().ToArray();
+        return _device.SetBrightness(brightness, allLightIds, out error);
     }
 
     private bool EnsureConnected(out string? error)
     {
         error = null;
-        if (_device is not null)
+        if (_device is not null && _profile is not null)
         {
             return true;
         }
 
-        _device = AlienFxV4Device.Open(VendorId, ProductId, out error);
-        return _device is not null;
+        foreach (HidDeviceInfo deviceInfo in HidNative.EnumerateDevices())
+        {
+            if (deviceInfo.OutputReportLength != 34)
+            {
+                continue;
+            }
+
+            LightingDeviceProfile? profile = _catalog.FindProfile(deviceInfo.VendorId, deviceInfo.ProductId);
+            if (profile is null)
+            {
+                continue;
+            }
+
+            AlienFxV4Device? device = AlienFxV4Device.Open(deviceInfo, out error);
+            if (device is null)
+            {
+                continue;
+            }
+
+            _device = device;
+            _profile = profile;
+            error = null;
+            return true;
+        }
+
+        error = "No supported AlienFX API v4 lighting device was found.";
+        return false;
     }
 
     private bool TryPersistDefaultState(LightingSnapshot snapshot, out string? error)
@@ -181,7 +213,7 @@ public sealed class AlienFxLightingController : IDisposable
             return false;
         }
 
-        if (_device is null)
+        if (_device is null || _profile is null)
         {
             error = "Lighting device is unavailable.";
             return false;
@@ -192,16 +224,17 @@ public sealed class AlienFxLightingController : IDisposable
             return false;
         }
 
-        foreach (ZoneLightingState zoneState in snapshot.ZoneStates.OrderBy(static state => state.Zone))
+        Dictionary<int, LightingZoneDefinition> zonesById = _profile.Zones.ToDictionary(zone => zone.ZoneId);
+        foreach (ZoneLightingState zoneState in snapshot.ZoneStates.OrderBy(static state => state.ZoneId))
         {
-            if (!ZoneLightIds.TryGetValue(zoneState.Zone, out byte[]? lightIds))
+            if (!zonesById.TryGetValue(zoneState.ZoneId, out LightingZoneDefinition? zoneDefinition))
             {
                 continue;
             }
 
             bool success = zoneState.Effect == LightingEffect.Static
-                ? _device.ApplyStaticZones(zoneState.PrimaryColor, lightIds, out error)
-                : PersistAnimatedZone(zoneState, lightIds, out error);
+                ? _device.ApplyStaticZones(zoneState.PrimaryColor, zoneDefinition.LightIds, out error)
+                : PersistAnimatedZone(zoneState, zoneDefinition.LightIds, out error);
 
             if (!success)
             {
@@ -222,6 +255,7 @@ public sealed class AlienFxLightingController : IDisposable
     {
         _device?.Dispose();
         _device = null;
+        _profile = null;
     }
 
     private bool PersistAnimatedZone(ZoneLightingState zoneState, IReadOnlyList<byte> lightIds, out string? error)

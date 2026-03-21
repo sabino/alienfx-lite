@@ -8,6 +8,12 @@
     <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Mappings\devices.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

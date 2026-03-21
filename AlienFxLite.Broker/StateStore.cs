@@ -47,21 +47,8 @@ internal sealed class StateStore
         File.WriteAllText(_diagnostics.StateFilePath, json);
     }
 
-    public static PersistedStateFile CreateDefaultState()
-    {
-        List<ZoneLightingState> defaultZones =
-        [
-            CreateDefaultZone(LightingZone.KbLeft),
-            CreateDefaultZone(LightingZone.KbCenter),
-            CreateDefaultZone(LightingZone.KbRight),
-            CreateDefaultZone(LightingZone.KbNumPad),
-        ];
-
-        return new PersistedStateFile(
-            new LightingSnapshot(true, 100, true, defaultZones),
+    public static PersistedStateFile CreateDefaultState() =>
+        new(
+            new LightingSnapshot(true, 100, true, null, []),
             new PersistedFanState(FanControlMode.Auto, null, null));
-    }
-
-    private static ZoneLightingState CreateDefaultZone(LightingZone zone) =>
-        new(zone, LightingEffect.Static, new RgbColor(255, 255, 255), null, 50, true);
 }
