@@ -1,4 +1,4 @@
-namespace AlienFxLite.Service;
+namespace AlienFxLite.Broker;
 
 internal sealed class ConsoleLifetime : IDisposable
 {

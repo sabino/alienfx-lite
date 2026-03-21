@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build solution
+        shell: pwsh
+        run: dotnet build .\AlienFxLite.sln --configuration Release
+
+      - name: Build release artifacts
+        shell: pwsh
+        run: .\scripts\build-release.ps1
+
+      - name: Smoke install installer
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem .\artifacts\release\AlienFxLite-Setup-win-x64-v*.exe | Select-Object -First 1
+          & $installer.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          Start-Sleep -Seconds 5
+          $service = Get-Service AlienFxLiteService -ErrorAction Stop
+          if ($service.Status -ne 'Running') {
+            throw "AlienFxLiteService is not running after installer smoke test."
+          }
+          .\artifacts\staging\tool\AlienFxLite.Tool.exe status
+          $uninstaller = Get-ChildItem "$env:ProgramFiles\AlienFx Lite\unins*.exe" | Select-Object -First 1
+          & $uninstaller.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: alienfx-lite-release
+          path: artifacts/release/*

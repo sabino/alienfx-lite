@@ -718,6 +718,71 @@
                                        Margin="0,12,0,0"
                                        Foreground="{StaticResource MutedBrush}"
                                        TextWrapping="Wrap"/>
+
+                            <Border Margin="0,14,0,0"
+                                    Padding="14"
+                                    CornerRadius="18"
+                                    Background="#45202A38"
+                                    BorderBrush="#39516F95"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource FieldLabelStyle}"
+                                                   Width="86"
+                                                   VerticalAlignment="Center"
+                                                   Text="VERSION"/>
+                                        <TextBlock x:Name="CurrentVersionText"
+                                                   Grid.Column="1"
+                                                   Foreground="{StaticResource TextBrush}"
+                                                   FontFamily="Segoe UI Variable Display"
+                                                   FontWeight="SemiBold"/>
+                                    </Grid>
+
+                                    <TextBlock x:Name="UpdateStatusText"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="UpdateWarningText"
+                                               Margin="0,8,0,0"
+                                               Foreground="{StaticResource DangerBrush}"
+                                               TextWrapping="Wrap"
+                                               Visibility="Collapsed"/>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                        <Button x:Name="CheckUpdatesButton"
+                                                Width="146"
+                                                Height="38"
+                                                Style="{StaticResource GlassButtonStyle}"
+                                                Click="CheckUpdatesButton_Click"
+                                                Content="Check for updates"/>
+                                        <Button x:Name="OpenReleaseButton"
+                                                Width="114"
+                                                Height="38"
+                                                Margin="8,0,0,0"
+                                                Style="{StaticResource GlassButtonStyle}"
+                                                Click="OpenReleaseButton_Click"
+                                                Content="Open release"
+                                                Visibility="Collapsed"/>
+                                        <Button x:Name="DownloadInstallerButton"
+                                                Width="138"
+                                                Height="38"
+                                                Margin="8,0,0,0"
+                                                Style="{StaticResource AccentGlassButtonStyle}"
+                                                Click="DownloadInstallerButton_Click"
+                                                Content="Download installer"
+                                                Visibility="Collapsed"/>
+                                    </StackPanel>
+
+                                    <TextBlock x:Name="ReleaseNotesText"
+                                               Margin="0,12,0,0"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               TextWrapping="Wrap"
+                                               Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
 

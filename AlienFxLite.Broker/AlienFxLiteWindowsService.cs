@@ -1,6 +1,6 @@
 using System.ServiceProcess;
 
-namespace AlienFxLite.Service;
+namespace AlienFxLite.Broker;
 
 internal sealed class AlienFxLiteWindowsService : ServiceBase
 {
@@ -9,7 +9,7 @@ internal sealed class AlienFxLiteWindowsService : ServiceBase
     public AlienFxLiteWindowsService(BrokerRuntime runtime)
     {
         _runtime = runtime;
-        ServiceName = "AlienFxLiteService";
+        ServiceName = ServiceInstaller.ServiceName;
         AutoLog = false;
         CanShutdown = true;
         CanHandlePowerEvent = true;

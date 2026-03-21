@@ -1,6 +1,6 @@
 using System.ServiceProcess;
 
-namespace AlienFxLite.Service;
+namespace AlienFxLite.Broker;
 
 public static class BrokerHost
 {

@@ -2,7 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AlienFxLite.Contracts\AlienFxLite.Contracts.csproj" />
-    <ProjectReference Include="..\AlienFxLite.Service\AlienFxLite.Service.csproj" />
+    <ProjectReference Include="..\AlienFxLite.Broker\AlienFxLite.Broker.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

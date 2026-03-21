@@ -1,7 +1,7 @@
 using System.Text.Json;
 using AlienFxLite.Contracts;
 
-namespace AlienFxLite.Service;
+namespace AlienFxLite.Broker;
 
 internal sealed record PersistedFanState(
     FanControlMode Mode,

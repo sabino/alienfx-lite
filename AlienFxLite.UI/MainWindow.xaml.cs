@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -66,7 +67,8 @@ public partial class MainWindow : Window
 
     private readonly AlienFxLiteServiceClient _client = new();
     private readonly DesktopSettingsStore _desktopSettingsStore = new();
-    private readonly UiLaunchOptions _launchOptions;
+    private readonly GitHubReleaseUpdateService _updateService = new();
+    private readonly AppLaunchOptions _launchOptions;
     private readonly WinForms.ColorDialog _colorDialog = new() { FullOpen = true };
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly Dictionary<LightingZone, ToggleButton> _zoneButtons;
@@ -81,16 +83,19 @@ public partial class MainWindow : Window
     private bool _loadingDesktopSettings;
     private bool _lightingDirty;
     private bool _allowExit;
+    private bool _checkingForUpdates;
     private bool _startHiddenPending;
     private bool _trayTipShown;
     private string? _desktopSettingsError;
+    private string? _updateError;
+    private GitHubReleaseUpdateService.UpdateCheckResult? _lastUpdateResult;
 
     public MainWindow()
-        : this(new UiLaunchOptions(false))
+        : this(new AppLaunchOptions(AppCommand.Ui, false, null, null))
     {
     }
 
-    internal MainWindow(UiLaunchOptions launchOptions)
+    internal MainWindow(AppLaunchOptions launchOptions)
     {
         _launchOptions = launchOptions;
         _desktopSettings = _desktopSettingsStore.Load();
@@ -136,12 +141,14 @@ public partial class MainWindow : Window
         MinimizeToTrayCheck.IsChecked = _desktopSettings.MinimizeToTray;
         _loadingDesktopSettings = false;
 
+        CurrentVersionText.Text = $"AlienFx Lite {AppVersionInfo.CurrentVersion}";
         UpdateColorButton(PrimaryColorButton, _primaryColor);
         UpdateColorButton(SecondaryColorButton, _secondaryColor);
         UpdateTrackLabels();
         UpdateEffectUi();
         UpdateApplyButtonState();
         UpdateDesktopStatus();
+        UpdateUpdateUi();
         RefreshKeyboardPreview();
         UpdateTrayVisibility();
 
@@ -270,6 +277,51 @@ public partial class MainWindow : Window
             ApplyDesktopSettingsToControls(_desktopSettings);
             UpdateDesktopStatus();
             WpfMessageBox.Show(this, ex.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_checkingForUpdates)
+        {
+            return;
+        }
+
+        _checkingForUpdates = true;
+        _updateError = null;
+        UpdateUpdateUi();
+
+        try
+        {
+            _lastUpdateResult = await _updateService.CheckAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _lastUpdateResult = null;
+            _updateError = ex.Message;
+        }
+        finally
+        {
+            _checkingForUpdates = false;
+            UpdateUpdateUi();
+        }
+    }
+
+    private void OpenReleaseButton_Click(object sender, RoutedEventArgs e)
+    {
+        string? releaseUrl = _lastUpdateResult?.Release?.ReleasePageUrl;
+        if (!string.IsNullOrWhiteSpace(releaseUrl))
+        {
+            OpenExternalTarget(releaseUrl);
+        }
+    }
+
+    private void DownloadInstallerButton_Click(object sender, RoutedEventArgs e)
+    {
+        string? installerUrl = _lastUpdateResult?.Release?.InstallerUrl;
+        if (!string.IsNullOrWhiteSpace(installerUrl))
+        {
+            OpenExternalTarget(installerUrl);
         }
     }
 
@@ -551,6 +603,72 @@ public partial class MainWindow : Window
         UpdateTrayVisibility();
     }
 
+    private void UpdateUpdateUi()
+    {
+        CurrentVersionText.Text = $"AlienFx Lite {AppVersionInfo.CurrentVersion}";
+        CheckUpdatesButton.Content = _checkingForUpdates ? "Checking..." : "Check for updates";
+        CheckUpdatesButton.IsEnabled = !_checkingForUpdates;
+
+        if (_checkingForUpdates)
+        {
+            UpdateStatusText.Text = "Checking GitHub Releases for a newer build...";
+            UpdateWarningText.Visibility = Visibility.Collapsed;
+            OpenReleaseButton.Visibility = Visibility.Collapsed;
+            DownloadInstallerButton.Visibility = Visibility.Collapsed;
+            ReleaseNotesText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_updateError))
+        {
+            UpdateStatusText.Text = "Unable to complete the update check.";
+            UpdateWarningText.Text = _updateError;
+            UpdateWarningText.Visibility = Visibility.Visible;
+            OpenReleaseButton.Visibility = Visibility.Collapsed;
+            DownloadInstallerButton.Visibility = Visibility.Collapsed;
+            ReleaseNotesText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        if (_lastUpdateResult is null)
+        {
+            UpdateStatusText.Text = "Manual update checks query GitHub Releases only when you click the button.";
+            UpdateWarningText.Visibility = Visibility.Collapsed;
+            OpenReleaseButton.Visibility = Visibility.Collapsed;
+            DownloadInstallerButton.Visibility = Visibility.Collapsed;
+            ReleaseNotesText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        UpdateStatusText.Text = _lastUpdateResult.StatusMessage;
+        if (!string.IsNullOrWhiteSpace(_lastUpdateResult.WarningMessage))
+        {
+            UpdateWarningText.Text = _lastUpdateResult.WarningMessage;
+            UpdateWarningText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            UpdateWarningText.Visibility = Visibility.Collapsed;
+        }
+
+        OpenReleaseButton.Visibility = _lastUpdateResult.Release is null ? Visibility.Collapsed : Visibility.Visible;
+        DownloadInstallerButton.Visibility = _lastUpdateResult.UpdateAvailable &&
+                                             !string.IsNullOrWhiteSpace(_lastUpdateResult.Release?.InstallerUrl)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        string notes = SummarizeReleaseNotes(_lastUpdateResult.Release?.Notes);
+        if (string.IsNullOrWhiteSpace(notes))
+        {
+            ReleaseNotesText.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            ReleaseNotesText.Text = notes;
+            ReleaseNotesText.Visibility = Visibility.Visible;
+        }
+    }
+
     private WinForms.NotifyIcon CreateNotifyIcon()
     {
         WinForms.ContextMenuStrip menu = new();
@@ -654,6 +772,32 @@ public partial class MainWindow : Window
         {
             _allowExit = true;
             Close();
+        });
+    }
+
+    private static string SummarizeReleaseNotes(string? notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes))
+        {
+            return string.Empty;
+        }
+
+        string[] lines = notes
+            .Replace("\r", string.Empty)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Take(5)
+            .ToArray();
+
+        string summary = string.Join(Environment.NewLine, lines);
+        return summary.Length > 420 ? summary[..420].TrimEnd() + "..." : summary;
+    }
+
+    private static void OpenExternalTarget(string target)
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = target,
+            UseShellExecute = true,
         });
     }
 

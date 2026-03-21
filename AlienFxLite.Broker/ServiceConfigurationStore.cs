@@ -3,7 +3,7 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
 
-namespace AlienFxLite.Service;
+namespace AlienFxLite.Broker;
 
 internal sealed record ServiceConfiguration(string? AllowedUserSid);
 
@@ -34,6 +34,13 @@ internal sealed class ServiceConfigurationStore
             _diagnostics.Error("Failed to load service configuration. Falling back to the default pipe ACL.", ex);
             return new ServiceConfiguration(null);
         }
+    }
+
+    public void Save(ServiceConfiguration configuration)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_diagnostics.ConfigFilePath)!);
+        string json = JsonSerializer.Serialize(configuration, AlienFxLite.Contracts.ServiceJson.Options);
+        File.WriteAllText(_diagnostics.ConfigFilePath, json);
     }
 
     public PipeSecurity CreatePipeSecurity(ServiceConfiguration configuration)

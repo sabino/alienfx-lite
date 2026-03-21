@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace AlienFxLite.Service;
+namespace AlienFxLite.Broker;
 
 internal sealed class ServiceDiagnostics
 {

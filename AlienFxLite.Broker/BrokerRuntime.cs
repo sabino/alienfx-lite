@@ -5,7 +5,7 @@ using AlienFxLite.Contracts;
 using AlienFxLite.Hardware.Fans;
 using AlienFxLite.Hardware.Lighting;
 
-namespace AlienFxLite.Service;
+namespace AlienFxLite.Broker;
 
 internal sealed class BrokerRuntime : IDisposable
 {
@@ -463,5 +463,5 @@ internal sealed class BrokerRuntime : IDisposable
         new(requestId, false, code, message, ServiceJson.ToElement(payload));
 
     private static string GetServiceVersion() =>
-        Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
+        Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.1.0";
 }

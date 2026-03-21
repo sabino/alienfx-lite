@@ -13,9 +13,18 @@ if (-not $existing) {
     return
 }
 
-if ($existing.Status -ne 'Stopped') {
-    Stop-Service -Name $serviceName -Force -ErrorAction Stop
+$service = Get-CimInstance Win32_Service -Filter "Name='$serviceName'"
+$binaryPath = if ($service.PathName -match '^\s*"([^"]+)"') {
+    $Matches[1]
+} elseif ($service.PathName -match '^\s*([^\s]+)') {
+    $Matches[1]
+} else {
+    throw "Unable to resolve the installed binary path from service command line: $($service.PathName)"
 }
 
-sc.exe delete $serviceName | Out-Null
+& $binaryPath --uninstall-service
+if ($LASTEXITCODE -ne 0) {
+    throw "AlienFx Lite service uninstall failed with exit code $LASTEXITCODE."
+}
+
 Write-Host "Removed $serviceName"

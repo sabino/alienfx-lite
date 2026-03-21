@@ -8,11 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\AlienFxLite.Contracts\AlienFxLite.Contracts.csproj" />
-    <ProjectReference Include="..\AlienFxLite.Hardware\AlienFxLite.Hardware.csproj" />
+    <ProjectReference Include="..\AlienFxLite.Broker\AlienFxLite.Broker.csproj" />
   </ItemGroup>
 </Project>

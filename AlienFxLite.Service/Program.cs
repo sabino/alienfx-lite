@@ -1,3 +1,5 @@
+using AlienFxLite.Broker;
+
 namespace AlienFxLite.Service;
 
 internal static class Program

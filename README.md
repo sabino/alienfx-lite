@@ -2,15 +2,17 @@
 
 Minimal Dell G3/G5 fan and keyboard lighting control for `VID_187C/PID_0550`.
 
-The normal desktop artifact is now a single Windows executable:
+The main desktop artifact is a single self-contained Windows app:
 
 - `AlienFxLite.exe`
-  - launch it normally to open the WPF UI
-  - install that same binary as `LocalSystem` and it runs as the broker service
+  - launch normally to open the WPF UI
+  - launch as a Windows service under `LocalSystem` to host the privileged broker
+  - launch with `--install-service` / `--uninstall-service` for service management
 
-Optional companion projects remain in the repo:
+The repo also contains:
 
-- `AlienFxLite.Service`: console-friendly broker host for debugging
+- `AlienFxLite.Broker`: shared broker/runtime library
+- `AlienFxLite.Service`: console-friendly debug host for the broker
 - `AlienFxLite.Tool`: unelevated CLI client
 
 ## Supported Keyboard Zones
@@ -26,22 +28,25 @@ Optional companion projects remain in the repo:
 dotnet build .\AlienFxLite.sln
 ```
 
-## Publish The Single Executable
+## Local Packaging
+
+Build the full release payload locally:
 
 ```powershell
-dotnet publish .\AlienFxLite.UI\AlienFxLite.UI.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true -o .\artifacts\app
+.\scripts\build-release.ps1
 ```
 
-That produces:
+That creates:
+
+- `artifacts\release\AlienFxLite-Setup-win-x64-v0.1.0.exe`
+- `artifacts\release\AlienFxLite-portable-win-x64-v0.1.0.zip`
+- `artifacts\release\AlienFxLite.Tool-win-x64-v0.1.0.zip`
+- `artifacts\release\SHA256SUMS.txt`
+
+If you only want the desktop app publish output:
 
 ```powershell
-.\artifacts\app\AlienFxLite.exe
-```
-
-Optional CLI publish:
-
-```powershell
-dotnet publish .\AlienFxLite.Tool\AlienFxLite.Tool.csproj -c Release -r win-x64 --self-contained false -o .\artifacts\tool
+dotnet publish .\AlienFxLite.UI\AlienFxLite.UI.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeNativeLibrariesForSelfExtract=true -o .\artifacts\app
 ```
 
 ## Run The UI
@@ -55,22 +60,30 @@ The desktop app includes:
 - lighting and fan control
 - minimize/close to tray
 - per-user `Start with Windows`
+- manual `Check for updates` against GitHub Releases
 - automatic broker reconnect
 
-## Install The Broker Service
+## Service Management
 
-The normal path is a one-time `sudo.exe` install from a regular terminal:
+The desktop binary now manages its own service registration.
+
+Install the service directly:
+
+```powershell
+sudo .\artifacts\app\AlienFxLite.exe --install-service --binary-path .\artifacts\app\AlienFxLite.exe
+```
+
+Uninstall it:
+
+```powershell
+sudo .\artifacts\app\AlienFxLite.exe --uninstall-service
+```
+
+The PowerShell wrappers still exist for convenience:
 
 ```powershell
 sudo powershell -ExecutionPolicy Bypass -File .\scripts\install-service.ps1
-```
-
-That installs `AlienFxLiteService` as `LocalSystem`, preserves the persisted state under `C:\ProgramData\AlienFxLite`, and grants the current desktop user access to the broker pipe.
-
-You can also run the script manually from an elevated PowerShell:
-
-```powershell
-.\scripts\install-service.ps1 -BinaryPath .\artifacts\app\AlienFxLite.exe
+sudo powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-service.ps1
 ```
 
 Verify the installed service:
@@ -81,16 +94,34 @@ sc.exe qc AlienFxLiteService
 .\artifacts\tool\AlienFxLite.Tool.exe status
 ```
 
-Remove the service:
-
-```powershell
-sudo powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-service.ps1
-```
-
-## Debug Broker In Console Mode
+## Console Broker Debugging
 
 ```powershell
 .\AlienFxLite.Service\bin\Debug\net8.0-windows\AlienFxLite.Service.exe
+```
+
+Or from the unified desktop binary:
+
+```powershell
+.\artifacts\app\AlienFxLite.exe --service-console
+```
+
+## GitHub Actions Release Flow
+
+- `ci.yml`
+  - builds the solution
+  - builds the full release payload
+  - smoke-installs the generated installer on `windows-latest`
+- `release.yml`
+  - runs on tags matching `v*`
+  - builds the release payload
+  - creates a GitHub Release with all release artifacts
+
+Create a release tag:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 ## CLI Examples
