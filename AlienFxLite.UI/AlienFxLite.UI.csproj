@@ -2,15 +2,22 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AlienFxLite.Contracts\AlienFxLite.Contracts.csproj" />
+    <ProjectReference Include="..\AlienFxLite.Service\AlienFxLite.Service.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <AssemblyName>AlienFxLite</AssemblyName>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+  </ItemGroup>
 
 </Project>

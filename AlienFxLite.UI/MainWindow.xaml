@@ -689,6 +689,38 @@
                         </StackPanel>
                     </Border>
 
+                    <Border Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Desktop"/>
+                            <TextBlock Style="{StaticResource SectionHintStyle}"
+                                       Margin="0,6,0,14"
+                                       Text="Keep the unified app in the tray and register it for the current user's Windows sign-in session."/>
+                            <Border Padding="14"
+                                    CornerRadius="18"
+                                    Background="#45202A38"
+                                    BorderBrush="#39516F95"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <CheckBox x:Name="StartWithWindowsCheck"
+                                              Foreground="{StaticResource TextBrush}"
+                                              Margin="0,0,0,8"
+                                              Checked="DesktopSettingChanged"
+                                              Unchecked="DesktopSettingChanged"
+                                              Content="Start with Windows"/>
+                                    <CheckBox x:Name="MinimizeToTrayCheck"
+                                              Foreground="{StaticResource TextBrush}"
+                                              Checked="DesktopSettingChanged"
+                                              Unchecked="DesktopSettingChanged"
+                                              Content="Minimize and close to tray"/>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock x:Name="DesktopStatusText"
+                                       Margin="0,12,0,0"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
                     <Border Style="{StaticResource GlassCardStyle}" Padding="18">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Live State"/>

@@ -1,20 +1,14 @@
-using System.ServiceProcess;
-
 namespace AlienFxLite.Service;
 
 internal static class Program
 {
-    public static async Task Main(string[] args)
+    public static void Main()
     {
-        BrokerRuntime runtime = new();
-
-        if (Environment.UserInteractive)
+        if (BrokerHost.TryRunAsWindowsService())
         {
-            using ConsoleLifetime lifetime = new(runtime);
-            await lifetime.RunAsync().ConfigureAwait(false);
             return;
         }
 
-        ServiceBase.Run(new AlienFxLiteWindowsService(runtime));
+        BrokerHost.RunConsoleBrokerAsync().GetAwaiter().GetResult();
     }
 }

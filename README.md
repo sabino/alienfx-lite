@@ -1,12 +1,19 @@
 # AlienFx Lite
 
-Minimal Dell G3/G5 fan and keyboard lighting control built as:
+Minimal Dell G3/G5 fan and keyboard lighting control for `VID_187C/PID_0550`.
 
-- `AlienFxLite.Service`: privileged Windows service broker
-- `AlienFxLite.UI`: unelevated WPF desktop client
+The normal desktop artifact is now a single Windows executable:
+
+- `AlienFxLite.exe`
+  - launch it normally to open the WPF UI
+  - install that same binary as `LocalSystem` and it runs as the broker service
+
+Optional companion projects remain in the repo:
+
+- `AlienFxLite.Service`: console-friendly broker host for debugging
 - `AlienFxLite.Tool`: unelevated CLI client
 
-V1 targets `VID_187C/PID_0550` with the 4 keyboard zones:
+## Supported Keyboard Zones
 
 - `KB Left`
 - `KB Center`
@@ -19,23 +26,38 @@ V1 targets `VID_187C/PID_0550` with the 4 keyboard zones:
 dotnet build .\AlienFxLite.sln
 ```
 
-## Publish
+## Publish The Single Executable
 
 ```powershell
-dotnet publish .\AlienFxLite.Service\AlienFxLite.Service.csproj -c Release -r win-x64 --self-contained false -o .\artifacts\service
-dotnet publish .\AlienFxLite.UI\AlienFxLite.UI.csproj -c Release -r win-x64 --self-contained false -o .\artifacts\ui
+dotnet publish .\AlienFxLite.UI\AlienFxLite.UI.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true -o .\artifacts\app
+```
+
+That produces:
+
+```powershell
+.\artifacts\app\AlienFxLite.exe
+```
+
+Optional CLI publish:
+
+```powershell
 dotnet publish .\AlienFxLite.Tool\AlienFxLite.Tool.csproj -c Release -r win-x64 --self-contained false -o .\artifacts\tool
 ```
 
-## Run The Service In Console Mode
-
-This is useful for testing lights from a normal user session. Fan control is expected to remain unavailable here unless the broker is running with elevated service rights.
+## Run The UI
 
 ```powershell
-.\artifacts\service\AlienFxLite.Service.exe
+.\artifacts\app\AlienFxLite.exe
 ```
 
-## Install As A Windows Service
+The desktop app includes:
+
+- lighting and fan control
+- minimize/close to tray
+- per-user `Start with Windows`
+- automatic broker reconnect
+
+## Install The Broker Service
 
 The normal path is a one-time `sudo.exe` install from a regular terminal:
 
@@ -43,12 +65,12 @@ The normal path is a one-time `sudo.exe` install from a regular terminal:
 sudo powershell -ExecutionPolicy Bypass -File .\scripts\install-service.ps1
 ```
 
-That installs `AlienFxLiteService` as `LocalSystem`, preserves the current persisted state under `C:\ProgramData\AlienFxLite`, and grants the current desktop user access to the broker pipe.
+That installs `AlienFxLiteService` as `LocalSystem`, preserves the persisted state under `C:\ProgramData\AlienFxLite`, and grants the current desktop user access to the broker pipe.
 
 You can also run the script manually from an elevated PowerShell:
 
 ```powershell
-.\scripts\install-service.ps1 -BinaryPath .\artifacts\service\AlienFxLite.Service.exe
+.\scripts\install-service.ps1 -BinaryPath .\artifacts\app\AlienFxLite.exe
 ```
 
 Verify the installed service:
@@ -65,12 +87,10 @@ Remove the service:
 sudo powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-service.ps1
 ```
 
-## UI
-
-Run:
+## Debug Broker In Console Mode
 
 ```powershell
-.\artifacts\ui\AlienFxLite.UI.exe
+.\AlienFxLite.Service\bin\Debug\net8.0-windows\AlienFxLite.Service.exe
 ```
 
 ## CLI Examples

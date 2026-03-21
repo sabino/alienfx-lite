@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$BinaryPath = (Join-Path $PSScriptRoot '..\artifacts\service\AlienFxLite.Service.exe'),
+    [string]$BinaryPath = (Join-Path $PSScriptRoot '..\artifacts\app\AlienFxLite.exe'),
     [string]$AllowedUserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 )
 

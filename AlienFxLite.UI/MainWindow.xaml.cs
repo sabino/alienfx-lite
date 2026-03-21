@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -64,20 +65,47 @@ public partial class MainWindow : Window
     ];
 
     private readonly AlienFxLiteServiceClient _client = new();
+    private readonly DesktopSettingsStore _desktopSettingsStore = new();
+    private readonly UiLaunchOptions _launchOptions;
     private readonly WinForms.ColorDialog _colorDialog = new() { FullOpen = true };
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly Dictionary<LightingZone, ToggleButton> _zoneButtons;
     private readonly List<KeyCapCell> _keyboardCells = [];
+    private readonly WinForms.NotifyIcon _notifyIcon;
 
+    private DesktopSettings _desktopSettings;
     private DrawingColor _primaryColor = DrawingColor.White;
     private DrawingColor _secondaryColor = DrawingColor.Black;
     private bool _refreshing;
     private bool _loadingLightingState;
+    private bool _loadingDesktopSettings;
     private bool _lightingDirty;
+    private bool _allowExit;
+    private bool _startHiddenPending;
+    private bool _trayTipShown;
+    private string? _desktopSettingsError;
 
     public MainWindow()
+        : this(new UiLaunchOptions(false))
     {
+    }
+
+    internal MainWindow(UiLaunchOptions launchOptions)
+    {
+        _launchOptions = launchOptions;
+        _desktopSettings = _desktopSettingsStore.Load();
+
+        try
+        {
+            _desktopSettingsStore.SyncStartupRegistration(_desktopSettings.StartWithWindows);
+        }
+        catch (Exception ex)
+        {
+            _desktopSettingsError = ex.Message;
+        }
+
         InitializeComponent();
+        _notifyIcon = CreateNotifyIcon();
 
         _zoneButtons = new Dictionary<LightingZone, ToggleButton>
         {
@@ -103,21 +131,43 @@ public partial class MainWindow : Window
         EnabledCheck.IsChecked = true;
         _loadingLightingState = false;
 
+        _loadingDesktopSettings = true;
+        StartWithWindowsCheck.IsChecked = _desktopSettings.StartWithWindows;
+        MinimizeToTrayCheck.IsChecked = _desktopSettings.MinimizeToTray;
+        _loadingDesktopSettings = false;
+
         UpdateColorButton(PrimaryColorButton, _primaryColor);
         UpdateColorButton(SecondaryColorButton, _secondaryColor);
         UpdateTrackLabels();
         UpdateEffectUi();
         UpdateApplyButtonState();
+        UpdateDesktopStatus();
         RefreshKeyboardPreview();
+        UpdateTrayVisibility();
+
+        if (_launchOptions.StartupLaunch && _desktopSettings.MinimizeToTray)
+        {
+            WindowState = WindowState.Minimized;
+            ShowInTaskbar = false;
+            _startHiddenPending = true;
+        }
 
         _refreshTimer.Tick += async (_, _) => await RefreshStatusAsync(silent: true, preservePendingLighting: true).ConfigureAwait(true);
-        Closed += (_, _) => _refreshTimer.Stop();
+        StateChanged += Window_StateChanged;
+        Closing += Window_Closing;
+        Closed += Window_Closed;
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
         await RefreshStatusAsync(silent: true, preservePendingLighting: false).ConfigureAwait(true);
         _refreshTimer.Start();
+
+        if (_startHiddenPending)
+        {
+            HideToTray(showNotification: false);
+            _startHiddenPending = false;
+        }
     }
 
     private void Window_SourceInitialized(object? sender, EventArgs e)
@@ -194,6 +244,34 @@ public partial class MainWindow : Window
     private void SettingChanged(object sender, RoutedEventArgs e) => MarkLightingDirty();
 
     private void ZoneButton_Changed(object sender, RoutedEventArgs e) => MarkLightingDirty();
+
+    private void DesktopSettingChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loadingDesktopSettings)
+        {
+            return;
+        }
+
+        DesktopSettings next = new(
+            StartWithWindowsCheck.IsChecked == true,
+            MinimizeToTrayCheck.IsChecked == true);
+
+        try
+        {
+            _desktopSettingsStore.Save(next);
+            _desktopSettings = next;
+            _desktopSettingsError = null;
+            UpdateTrayVisibility();
+            UpdateDesktopStatus();
+        }
+        catch (Exception ex)
+        {
+            _desktopSettingsError = ex.Message;
+            ApplyDesktopSettingsToControls(_desktopSettings);
+            UpdateDesktopStatus();
+            WpfMessageBox.Show(this, ex.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     private async Task RefreshStatusAsync(bool silent, bool preservePendingLighting)
     {
@@ -426,6 +504,157 @@ public partial class MainWindow : Window
 
         LightingHintText.Text =
             $"Selected: {selectedZones}  |  Effect: {EffectCombo.SelectedItem}  |  Brightness: {(int)BrightnessSlider.Value}%  |  KeepAlive: {(KeepAliveCheck.IsChecked == true ? "on" : "off")}";
+    }
+
+    private void ApplyDesktopSettingsToControls(DesktopSettings settings)
+    {
+        _loadingDesktopSettings = true;
+        try
+        {
+            StartWithWindowsCheck.IsChecked = settings.StartWithWindows;
+            MinimizeToTrayCheck.IsChecked = settings.MinimizeToTray;
+        }
+        finally
+        {
+            _loadingDesktopSettings = false;
+        }
+    }
+
+    private void UpdateDesktopStatus()
+    {
+        List<string> fragments = [];
+
+        if (_desktopSettings.StartWithWindows)
+        {
+            fragments.Add("Launches automatically at sign-in.");
+        }
+        else
+        {
+            fragments.Add("Launch remains manual.");
+        }
+
+        if (_desktopSettings.MinimizeToTray)
+        {
+            fragments.Add("Minimize or close keeps the app in the tray.");
+        }
+        else
+        {
+            fragments.Add("Closing exits the app fully.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(_desktopSettingsError))
+        {
+            fragments.Add($"Startup registration warning: {_desktopSettingsError}");
+        }
+
+        DesktopStatusText.Text = string.Join(" ", fragments);
+        UpdateTrayVisibility();
+    }
+
+    private WinForms.NotifyIcon CreateNotifyIcon()
+    {
+        WinForms.ContextMenuStrip menu = new();
+        menu.Items.Add("Open", null, TrayOpen_Click);
+        menu.Items.Add("Refresh", null, TrayRefresh_Click);
+        menu.Items.Add(new WinForms.ToolStripSeparator());
+        menu.Items.Add("Fans: BIOS / AUTO", null, TrayFanAuto_Click);
+        menu.Items.Add("Fans: MAX", null, TrayFanMax_Click);
+        menu.Items.Add(new WinForms.ToolStripSeparator());
+        menu.Items.Add("Exit", null, TrayExit_Click);
+
+        WinForms.NotifyIcon notifyIcon = new()
+        {
+            Text = "AlienFx Lite",
+            Icon = System.Drawing.SystemIcons.Application,
+            ContextMenuStrip = menu,
+            Visible = false,
+        };
+
+        notifyIcon.DoubleClick += TrayOpen_Click;
+        return notifyIcon;
+    }
+
+    private void UpdateTrayVisibility()
+    {
+        _notifyIcon.Visible = _desktopSettings.MinimizeToTray;
+    }
+
+    private void Window_StateChanged(object? sender, EventArgs e)
+    {
+        if (_desktopSettings.MinimizeToTray && WindowState == WindowState.Minimized)
+        {
+            HideToTray(showNotification: !_startHiddenPending);
+        }
+    }
+
+    private void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_allowExit || !_desktopSettings.MinimizeToTray)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        HideToTray(showNotification: false);
+    }
+
+    private void Window_Closed(object? sender, EventArgs e)
+    {
+        _refreshTimer.Stop();
+        _notifyIcon.Visible = false;
+        _notifyIcon.Dispose();
+    }
+
+    private void HideToTray(bool showNotification)
+    {
+        ShowInTaskbar = false;
+        Hide();
+        UpdateTrayVisibility();
+
+        if (showNotification && !_trayTipShown)
+        {
+            _notifyIcon.BalloonTipTitle = "AlienFx Lite";
+            _notifyIcon.BalloonTipText = "AlienFx Lite is still running in the tray. Double-click the icon to reopen it.";
+            _notifyIcon.ShowBalloonTip(1500);
+            _trayTipShown = true;
+        }
+    }
+
+    private void RestoreFromTray()
+    {
+        Show();
+        ShowInTaskbar = true;
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+        Topmost = true;
+        Topmost = false;
+        Focus();
+        UpdateTrayVisibility();
+    }
+
+    private void TrayOpen_Click(object? sender, EventArgs e) =>
+        Dispatcher.Invoke(RestoreFromTray);
+
+    private void TrayRefresh_Click(object? sender, EventArgs e) =>
+        Dispatcher.InvokeAsync(() => _ = RefreshStatusAsync(silent: true, preservePendingLighting: true));
+
+    private void TrayFanAuto_Click(object? sender, EventArgs e) =>
+        Dispatcher.InvokeAsync(() => _ = ApplyFanModeAsync(FanControlMode.Auto));
+
+    private void TrayFanMax_Click(object? sender, EventArgs e) =>
+        Dispatcher.InvokeAsync(() => _ = ApplyFanModeAsync(FanControlMode.Max));
+
+    private void TrayExit_Click(object? sender, EventArgs e)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            _allowExit = true;
+            Close();
+        });
     }
 
     private static System.Windows.Media.Brush BuildKeyBrush(bool selected, bool enabled, LightingEffect effect, MediaColor primary, MediaColor secondary)
