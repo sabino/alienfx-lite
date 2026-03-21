@@ -49,10 +49,16 @@ internal sealed class AlienFxV4Device : IDisposable
         return null;
     }
 
-    public bool ApplyZone(LightingZone zone, ZoneLightingState state, byte zoneId, out string? error)
+    public bool ApplyLight(ZoneLightingState state, byte lightId, out string? error)
     {
         error = null;
-        if (!PrepareAndSend(CommandColorSelect, [new CommandMod(6, [zoneId])], out error))
+        if (!PrepareAndSend(
+                CommandColorSelect,
+                [
+                    new CommandMod(5, [1]),
+                    new CommandMod(6, [lightId]),
+                ],
+                out error))
         {
             return false;
         }

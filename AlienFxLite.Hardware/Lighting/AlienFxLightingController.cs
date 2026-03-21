@@ -8,15 +8,15 @@ public sealed class AlienFxLightingController : IDisposable
     private const ushort ProductId = 0x0550;
     private const byte SavedLightingBlockId = 0x61;
 
-    private static readonly IReadOnlyDictionary<LightingZone, byte> ZoneIds = new Dictionary<LightingZone, byte>
+    private static readonly IReadOnlyDictionary<LightingZone, byte[]> ZoneLightIds = new Dictionary<LightingZone, byte[]>
     {
-        [LightingZone.KbLeft] = 0,
-        [LightingZone.KbCenter] = 1,
-        [LightingZone.KbRight] = 2,
-        [LightingZone.KbNumPad] = 3,
+        [LightingZone.KbLeft] = [0, 1, 2, 12, 13, 14],
+        [LightingZone.KbCenter] = [3, 4, 5, 15, 16, 17],
+        [LightingZone.KbRight] = [6, 7, 8, 18, 19, 20],
+        [LightingZone.KbNumPad] = [9, 10, 11, 21, 22, 23],
     };
 
-    private static readonly byte[] AllLightIds = [0, 1, 2, 3];
+    private static readonly byte[] AllLightIds = ZoneLightIds.Values.SelectMany(static ids => ids).Distinct().ToArray();
 
     private readonly object _sync = new();
     private AlienFxV4Device? _device;
@@ -106,9 +106,8 @@ public sealed class AlienFxLightingController : IDisposable
                      .GroupBy(static state => state.PrimaryColor))
         {
             byte[] zoneIds = staticGroup
-                .Select(static state => ZoneIds.TryGetValue(state.Zone, out byte zoneId) ? zoneId : (byte?)null)
-                .Where(static zoneId => zoneId.HasValue)
-                .Select(static zoneId => zoneId!.Value)
+                .SelectMany(static state => ZoneLightIds.TryGetValue(state.Zone, out byte[]? lightIds) ? lightIds : [])
+                .Distinct()
                 .ToArray();
 
             if (zoneIds.Length == 0)
@@ -129,14 +128,17 @@ public sealed class AlienFxLightingController : IDisposable
                 continue;
             }
 
-            if (!ZoneIds.TryGetValue(zoneState.Zone, out byte zoneId))
+            if (!ZoneLightIds.TryGetValue(zoneState.Zone, out byte[]? lightIds))
             {
                 continue;
             }
 
-            if (!_device.ApplyZone(zoneState.Zone, zoneState, zoneId, out error))
+            foreach (byte lightId in lightIds)
             {
-                return false;
+                if (!_device.ApplyLight(zoneState, lightId, out error))
+                {
+                    return false;
+                }
             }
 
             needsUpdate = true;
@@ -184,14 +186,14 @@ public sealed class AlienFxLightingController : IDisposable
 
         foreach (ZoneLightingState zoneState in snapshot.ZoneStates.OrderBy(static state => state.Zone))
         {
-            if (!ZoneIds.TryGetValue(zoneState.Zone, out byte zoneId))
+            if (!ZoneLightIds.TryGetValue(zoneState.Zone, out byte[]? lightIds))
             {
                 continue;
             }
 
             bool success = zoneState.Effect == LightingEffect.Static
-                ? _device.ApplyStaticZones(zoneState.PrimaryColor, [zoneId], out error)
-                : _device.ApplyZone(zoneState.Zone, zoneState, zoneId, out error);
+                ? _device.ApplyStaticZones(zoneState.PrimaryColor, lightIds, out error)
+                : PersistAnimatedZone(zoneState, lightIds, out error);
 
             if (!success)
             {
@@ -206,5 +208,25 @@ public sealed class AlienFxLightingController : IDisposable
     {
         _device?.Dispose();
         _device = null;
+    }
+
+    private bool PersistAnimatedZone(ZoneLightingState zoneState, IReadOnlyList<byte> lightIds, out string? error)
+    {
+        error = null;
+        if (_device is null)
+        {
+            error = "Lighting device is unavailable.";
+            return false;
+        }
+
+        foreach (byte lightId in lightIds)
+        {
+            if (!_device.ApplyLight(zoneState, lightId, out error))
+            {
+                return false;
+            }
+        }
+
+        return _device.UpdateColors(out error);
     }
 }
