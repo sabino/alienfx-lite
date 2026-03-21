@@ -53,12 +53,12 @@
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
             <Setter Property="FontFamily" Value="Segoe UI Variable Display"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontSize" Value="18"/>
         </Style>
 
         <Style x:Key="SectionHintStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
 
@@ -66,9 +66,9 @@
             <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
             <Setter Property="FontFamily" Value="Segoe UI Variable Display"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="10"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
             <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
         </Style>
 
@@ -77,10 +77,10 @@
             <Setter Property="Background" Value="#72203044"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrushGlass}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="16,11"/>
+            <Setter Property="Padding" Value="12,8"/>
             <Setter Property="FontFamily" Value="Segoe UI Variable Display"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="12"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -88,14 +88,14 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="18">
+                                CornerRadius="16">
                             <Grid>
                                 <Border Margin="1"
-                                        CornerRadius="17"
+                                        CornerRadius="15"
                                         Background="#14FFFFFF"
                                         Opacity="0.35"
                                         VerticalAlignment="Top"
-                                        Height="18"/>
+                                        Height="14"/>
                                 <ContentPresenter Margin="{TemplateBinding Padding}"
                                                   HorizontalAlignment="Center"
                                                   VerticalAlignment="Center"/>
@@ -123,12 +123,12 @@
             <Setter Property="Background" Value="#5A1D2938"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrushGlass}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="16,10"/>
-            <Setter Property="Margin" Value="0,0,10,10"/>
-            <Setter Property="MinWidth" Value="132"/>
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
+            <Setter Property="MinWidth" Value="104"/>
             <Setter Property="FontFamily" Value="Segoe UI Variable Display"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="12"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
@@ -136,11 +136,11 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="16">
+                                CornerRadius="14">
                             <Grid>
                                 <Border x:Name="ZoneGlow"
                                         Margin="1"
-                                        CornerRadius="15"
+                                        CornerRadius="13"
                                         Background="#14FFFFFF"
                                         Opacity="0.15"/>
                                 <ContentPresenter Margin="{TemplateBinding Padding}"
@@ -281,7 +281,7 @@
             <Setter Property="BorderBrush" Value="#A5EEFFFF"/>
             <Setter Property="BorderThickness" Value="1.2"/>
             <Setter Property="Foreground" Value="#04131B"/>
-            <Setter Property="Padding" Value="22,18"/>
+            <Setter Property="Padding" Value="16,12"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -289,7 +289,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="24">
+                                CornerRadius="20">
                             <Grid>
                                 <Ellipse Width="220"
                                          Height="220"
@@ -308,10 +308,10 @@
                                     </Ellipse.Effect>
                                 </Ellipse>
                                 <Border Margin="1"
-                                        CornerRadius="23"
+                                        CornerRadius="19"
                                         Background="#18FFFFFF"
                                         VerticalAlignment="Top"
-                                        Height="22"/>
+                                        Height="18"/>
                                 <ContentPresenter Margin="{TemplateBinding Padding}"/>
                             </Grid>
                         </Border>
@@ -327,6 +327,12 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <Style x:Key="AccentGlassButtonStyle" TargetType="Button" BasedOn="{StaticResource GlassButtonStyle}">
+            <Setter Property="Background" Value="#A61E748E"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         </Style>
     </Window.Resources>
 
@@ -364,14 +370,14 @@
             </Ellipse>
         </Canvas>
 
-        <Grid Margin="28">
+        <Grid Margin="20">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Style="{StaticResource GlassCardStyle}" Padding="24" Margin="0,0,0,18">
+            <Border Grid.Row="0" Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,0,14">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -382,10 +388,10 @@
                         <TextBlock Foreground="{StaticResource TextBrush}"
                                    FontFamily="Segoe UI Variable Display"
                                    FontWeight="SemiBold"
-                                   FontSize="30"
+                                   FontSize="26"
                                    Text="AlienFx Lite"/>
                         <TextBlock Foreground="{StaticResource MutedBrush}"
-                                   Margin="0,6,0,14"
+                                   Margin="0,6,0,10"
                                    Text="Minimal control with a cleaner visual surface and persistent hardware state."/>
                         <TextBlock x:Name="ServiceStatusText"
                                    Foreground="{StaticResource AccentStrongBrush}"
@@ -399,8 +405,8 @@
 
                     <Button x:Name="RefreshButton"
                             Grid.Column="1"
-                            Width="122"
-                            Height="52"
+                            Width="108"
+                            Height="44"
                             Style="{StaticResource GlassButtonStyle}"
                             Click="RefreshButton_Click"
                             Content="Refresh"/>
@@ -413,7 +419,7 @@
                     <ColumnDefinition Width="0.88*"/>
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Style="{StaticResource GlassCardStyle}" Padding="22" Margin="0,0,16,0">
+                <Border Grid.Column="0" Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,14,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -430,8 +436,8 @@
                         </StackPanel>
 
                         <Border Grid.Row="1"
-                                Margin="0,18,0,18"
-                                Padding="18"
+                                Margin="0,14,0,14"
+                                Padding="14"
                                 CornerRadius="30"
                                 Background="{StaticResource GlassAltBrush}"
                                 BorderBrush="{StaticResource InnerBorderBrush}"
@@ -443,35 +449,35 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <Border Height="14"
-                                        Margin="210,0,210,18"
+                                <Border Height="12"
+                                        Margin="210,0,210,14"
                                         CornerRadius="7"
                                         Background="#3B5D789A"/>
 
                                 <Viewbox Grid.Row="1" Stretch="Uniform">
-                                    <Grid Width="860" Height="348">
+                                    <Grid Width="820" Height="312">
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="248"/>
-                                            <RowDefinition Height="84"/>
+                                            <RowDefinition Height="218"/>
+                                            <RowDefinition Height="72"/>
                                         </Grid.RowDefinitions>
 
                                         <Border CornerRadius="30"
                                                 Background="{StaticResource PanelBackgroundBrush}"
                                                 BorderBrush="{StaticResource InnerBorderBrush}"
                                                 BorderThickness="1.2"
-                                                Padding="18">
+                                                Padding="14">
                                             <primitives:UniformGrid x:Name="KeyboardMatrixPanel"
                                                                     Rows="6"
                                                                     Columns="20"/>
                                         </Border>
 
                                         <Border Grid.Row="1"
-                                                Margin="118,16,118,0"
+                                                Margin="118,12,118,0"
                                                 CornerRadius="24"
                                                 Background="#43101823"
                                                 BorderBrush="#37617EA3"
                                                 BorderThickness="1">
-                                            <Border Margin="186,12"
+                                            <Border Margin="186,10"
                                                     CornerRadius="18"
                                                     Background="#2B0B121B"
                                                     BorderBrush="#4E7AB6D0"
@@ -481,7 +487,7 @@
                                 </Viewbox>
 
                                 <TextBlock Grid.Row="2"
-                                           Margin="0,16,0,0"
+                                           Margin="0,12,0,0"
                                            Foreground="{StaticResource MutedBrush}"
                                            Text="Selected zones are previewed live with your current deck colors before you commit."
                                            TextWrapping="Wrap"/>
@@ -518,14 +524,11 @@
                     </Grid>
                 </Border>
 
-                <Grid Grid.Column="1">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <Border Grid.Row="0" Style="{StaticResource GlassCardStyle}" Padding="22" Margin="0,0,0,16">
+                <ScrollViewer Grid.Column="1"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                    <Border Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,0,14">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -651,7 +654,7 @@
                         </Grid>
                     </Border>
 
-                    <Border Grid.Row="1" Style="{StaticResource GlassCardStyle}" Padding="22" Margin="0,0,0,16">
+                    <Border Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,0,14">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Thermals"/>
                             <TextBlock Style="{StaticResource SectionHintStyle}"
@@ -671,20 +674,22 @@
                                 </Grid.ColumnDefinitions>
                                 <Button x:Name="FanAutoButton"
                                         Margin="0,0,8,0"
+                                        Height="46"
                                         Style="{StaticResource GlassButtonStyle}"
                                         Click="FanAutoButton_Click"
                                         Content="BIOS / AUTO"/>
                                 <Button x:Name="FanMaxButton"
                                         Grid.Column="1"
                                         Margin="8,0,0,0"
-                                        Style="{StaticResource PrimaryActionButtonStyle}"
+                                        Height="46"
+                                        Style="{StaticResource AccentGlassButtonStyle}"
                                         Click="FanMaxButton_Click"
                                         Content="MAX"/>
                             </Grid>
                         </StackPanel>
                     </Border>
 
-                    <Border Grid.Row="2" Style="{StaticResource GlassCardStyle}" Padding="22">
+                    <Border Style="{StaticResource GlassCardStyle}" Padding="18">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Live State"/>
                             <TextBlock x:Name="PendingText"
@@ -696,13 +701,14 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
-                </Grid>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
 
             <Button x:Name="ApplyLightingButton"
                     Grid.Row="2"
-                    Height="84"
-                    Margin="0,16,0,0"
+                    Height="68"
+                    Margin="0,14,0,0"
                     Style="{StaticResource PrimaryActionButtonStyle}"
                     Click="ApplyLightingButton_Click">
                 <Grid>
@@ -714,11 +720,11 @@
                         <TextBlock x:Name="ApplyButtonTitleText"
                                    FontFamily="Segoe UI Variable Display"
                                    FontWeight="SemiBold"
-                                   FontSize="18"
+                                   FontSize="16"
                                    Text="Apply Lighting"/>
                         <TextBlock x:Name="ApplyButtonHintText"
-                                   Margin="0,4,0,0"
-                                   FontSize="12"
+                                   Margin="0,3,0,0"
+                                   FontSize="11"
                                    Foreground="#D5091922"
                                    TextWrapping="Wrap"
                                    Text="Commit the current deck to the keyboard and broker state."/>
@@ -727,7 +733,7 @@
                                Margin="18,0,0,0"
                                VerticalAlignment="Center"
                                FontFamily="Consolas"
-                               FontSize="26"
+                               FontSize="22"
                                FontWeight="Bold"
                                Text="&gt;"/>
                 </Grid>
