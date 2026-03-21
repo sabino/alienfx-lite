@@ -33,6 +33,8 @@ internal sealed class MainForm : Form
     private Color _primaryColor = Color.White;
     private Color _secondaryColor = Color.Black;
     private bool _refreshing;
+    private bool _loadingLightingState;
+    private bool _lightingDirty;
 
     public MainForm()
     {
@@ -55,7 +57,7 @@ internal sealed class MainForm : Form
     protected override async void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
-        await RefreshStatusAsync(silent: true).ConfigureAwait(true);
+        await RefreshStatusAsync(silent: true, preservePendingLighting: false).ConfigureAwait(true);
         _refreshTimer.Start();
     }
 
@@ -226,14 +228,28 @@ internal sealed class MainForm : Form
     {
         _primaryButton.Click += (_, _) => ChooseColor(_primaryButton, isPrimary: true);
         _secondaryButton.Click += (_, _) => ChooseColor(_secondaryButton, isPrimary: false);
-        _effectCombo.SelectedValueChanged += (_, _) => UpdateEffectUi();
-        _speedTrack.Scroll += (_, _) => UpdateTrackLabels();
-        _brightnessTrack.Scroll += (_, _) => UpdateTrackLabels();
+        _effectCombo.SelectedValueChanged += (_, _) =>
+        {
+            UpdateEffectUi();
+            MarkLightingDirty();
+        };
+        _speedTrack.Scroll += (_, _) =>
+        {
+            UpdateTrackLabels();
+            MarkLightingDirty();
+        };
+        _brightnessTrack.Scroll += (_, _) =>
+        {
+            UpdateTrackLabels();
+            MarkLightingDirty();
+        };
+        _keepAliveCheck.CheckedChanged += (_, _) => MarkLightingDirty();
+        _enabledCheck.CheckedChanged += (_, _) => MarkLightingDirty();
         _applyLightingButton.Click += async (_, _) => await ApplyLightingAsync().ConfigureAwait(true);
         _fanAutoButton.Click += async (_, _) => await ApplyFanModeAsync(FanControlMode.Auto).ConfigureAwait(true);
         _fanMaxButton.Click += async (_, _) => await ApplyFanModeAsync(FanControlMode.Max).ConfigureAwait(true);
-        _refreshButton.Click += async (_, _) => await RefreshStatusAsync(silent: false).ConfigureAwait(true);
-        _refreshTimer.Tick += async (_, _) => await RefreshStatusAsync(silent: true).ConfigureAwait(true);
+        _refreshButton.Click += async (_, _) => await RefreshStatusAsync(silent: false, preservePendingLighting: false).ConfigureAwait(true);
+        _refreshTimer.Tick += async (_, _) => await RefreshStatusAsync(silent: true, preservePendingLighting: true).ConfigureAwait(true);
     }
 
     private void AddZoneCheckbox(Control parent, LightingZone zone, string text)
@@ -245,10 +261,11 @@ internal sealed class MainForm : Form
             Checked = true,
         };
         _zoneChecks[zone] = check;
+        check.CheckedChanged += (_, _) => MarkLightingDirty();
         parent.Controls.Add(check);
     }
 
-    private async Task RefreshStatusAsync(bool silent)
+    private async Task RefreshStatusAsync(bool silent, bool preservePendingLighting)
     {
         if (_refreshing)
         {
@@ -259,7 +276,7 @@ internal sealed class MainForm : Form
         try
         {
             StatusSnapshot status = await _client.GetStatusAsync().ConfigureAwait(true);
-            ApplyStatus(status);
+            ApplyStatus(status, preservePendingLighting && _lightingDirty);
         }
         catch (Exception ex)
         {
@@ -302,7 +319,9 @@ internal sealed class MainForm : Form
                 _enabledCheck.Checked);
 
             await _client.SetLightingStateAsync(request).ConfigureAwait(true);
-            await RefreshStatusAsync(silent: true).ConfigureAwait(true);
+            _lightingDirty = false;
+            UpdateApplyButtonState();
+            await RefreshStatusAsync(silent: true, preservePendingLighting: false).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -315,7 +334,7 @@ internal sealed class MainForm : Form
         try
         {
             await _client.SetFanModeAsync(new SetFanModeRequest(mode)).ConfigureAwait(true);
-            await RefreshStatusAsync(silent: true).ConfigureAwait(true);
+            await RefreshStatusAsync(silent: true, preservePendingLighting: true).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -323,7 +342,7 @@ internal sealed class MainForm : Form
         }
     }
 
-    private void ApplyStatus(StatusSnapshot status)
+    private void ApplyStatus(StatusSnapshot status, bool preservePendingLighting)
     {
         _serviceStatusLabel.Text = "Service: connected";
         _deviceStatusLabel.Text = $"Lighting: {(status.Devices.LightingAvailable ? status.Devices.LightingDevice : "unavailable")} | Fans: {(status.Devices.FanAvailable ? status.Devices.FanProvider : "unavailable")}";
@@ -332,6 +351,14 @@ internal sealed class MainForm : Form
             ? $"RPM: {string.Join(" / ", status.Fan.Rpm)}"
             : $"RPM: n/a ({status.Fan.Message})";
 
+        if (preservePendingLighting)
+        {
+            return;
+        }
+
+        _loadingLightingState = true;
+        try
+        {
         _brightnessTrack.Value = Math.Clamp(status.Lighting.Brightness, _brightnessTrack.Minimum, _brightnessTrack.Maximum);
         _keepAliveCheck.Checked = status.Lighting.KeepAlive;
         _enabledCheck.Checked = status.Lighting.Enabled;
@@ -349,8 +376,25 @@ internal sealed class MainForm : Form
             UpdateColorButton(_secondaryButton, _secondaryColor);
         }
 
+            HashSet<LightingZone> activeZones = status.Lighting.ZoneStates
+                .Where(static zone => zone.Enabled)
+                .Select(static zone => zone.Zone)
+                .ToHashSet();
+            foreach ((LightingZone zone, CheckBox check) in _zoneChecks)
+            {
+                check.Checked = activeZones.Contains(zone);
+            }
+
         UpdateTrackLabels();
         UpdateEffectUi();
+        }
+        finally
+        {
+            _loadingLightingState = false;
+        }
+
+        _lightingDirty = false;
+        UpdateApplyButtonState();
     }
 
     private void ChooseColor(Button targetButton, bool isPrimary)
@@ -371,6 +415,8 @@ internal sealed class MainForm : Form
             _secondaryColor = _colorDialog.Color;
             UpdateColorButton(targetButton, _secondaryColor);
         }
+
+        MarkLightingDirty();
     }
 
     private void UpdateTrackLabels()
@@ -391,6 +437,22 @@ internal sealed class MainForm : Form
         _secondaryButton.Enabled = usesSecondary;
         _secondaryButton.Visible = usesSecondary;
         _secondaryLabel.Visible = usesSecondary;
+    }
+
+    private void MarkLightingDirty()
+    {
+        if (_loadingLightingState)
+        {
+            return;
+        }
+
+        _lightingDirty = true;
+        UpdateApplyButtonState();
+    }
+
+    private void UpdateApplyButtonState()
+    {
+        _applyLightingButton.Text = _lightingDirty ? "Apply Lights*" : "Apply Lights";
     }
 
     private static void UpdateColorButton(Button button, Color color)
