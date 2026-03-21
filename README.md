@@ -3,7 +3,7 @@
 Minimal Dell G3/G5 fan and keyboard lighting control built as:
 
 - `AlienFxLite.Service`: privileged Windows service broker
-- `AlienFxLite.UI`: unelevated WinForms client
+- `AlienFxLite.UI`: unelevated WPF desktop client
 - `AlienFxLite.Tool`: unelevated CLI client
 
 V1 targets `VID_187C/PID_0550` with the 4 keyboard zones:
@@ -37,10 +37,32 @@ This is useful for testing lights from a normal user session. Fan control is exp
 
 ## Install As A Windows Service
 
-Open an elevated PowerShell and run:
+The normal path is a one-time `sudo.exe` install from a regular terminal:
+
+```powershell
+sudo powershell -ExecutionPolicy Bypass -File .\scripts\install-service.ps1
+```
+
+That installs `AlienFxLiteService` as `LocalSystem`, preserves the current persisted state under `C:\ProgramData\AlienFxLite`, and grants the current desktop user access to the broker pipe.
+
+You can also run the script manually from an elevated PowerShell:
 
 ```powershell
 .\scripts\install-service.ps1 -BinaryPath .\artifacts\service\AlienFxLite.Service.exe
+```
+
+Verify the installed service:
+
+```powershell
+Get-Service AlienFxLiteService
+sc.exe qc AlienFxLiteService
+.\artifacts\tool\AlienFxLite.Tool.exe status
+```
+
+Remove the service:
+
+```powershell
+sudo powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-service.ps1
 ```
 
 ## UI
