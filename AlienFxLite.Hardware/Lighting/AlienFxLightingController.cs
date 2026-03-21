@@ -6,6 +6,7 @@ public sealed class AlienFxLightingController : IDisposable
 {
     private const ushort VendorId = 0x187C;
     private const ushort ProductId = 0x0550;
+    private const byte SavedLightingBlockId = 0x61;
 
     private static readonly IReadOnlyDictionary<LightingZone, byte> ZoneIds = new Dictionary<LightingZone, byte>
     {
@@ -61,6 +62,14 @@ public sealed class AlienFxLightingController : IDisposable
 
             ResetConnection();
             return TryApply(snapshot, out error);
+        }
+    }
+
+    public bool PersistDefaultState(LightingSnapshot snapshot, out string? error)
+    {
+        lock (_sync)
+        {
+            return TryPersistDefaultState(snapshot, out error);
         }
     }
 
@@ -152,6 +161,45 @@ public sealed class AlienFxLightingController : IDisposable
 
         _device = AlienFxV4Device.Open(VendorId, ProductId, out error);
         return _device is not null;
+    }
+
+    private bool TryPersistDefaultState(LightingSnapshot snapshot, out string? error)
+    {
+        error = null;
+        if (!EnsureConnected(out error))
+        {
+            return false;
+        }
+
+        if (_device is null)
+        {
+            error = "Lighting device is unavailable.";
+            return false;
+        }
+
+        if (!_device.BeginSavedLightingBlock(SavedLightingBlockId, out error))
+        {
+            return false;
+        }
+
+        foreach (ZoneLightingState zoneState in snapshot.ZoneStates.OrderBy(static state => state.Zone))
+        {
+            if (!ZoneIds.TryGetValue(zoneState.Zone, out byte zoneId))
+            {
+                continue;
+            }
+
+            bool success = zoneState.Effect == LightingEffect.Static
+                ? _device.ApplyStaticZones(zoneState.PrimaryColor, [zoneId], out error)
+                : _device.ApplyZone(zoneState.Zone, zoneState, zoneId, out error);
+
+            if (!success)
+            {
+                return false;
+            }
+        }
+
+        return _device.CommitSavedLightingBlock(SavedLightingBlockId, out error);
     }
 
     private void ResetConnection()

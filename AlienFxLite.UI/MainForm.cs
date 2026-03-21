@@ -5,6 +5,14 @@ namespace AlienFxLite.UI;
 
 internal sealed class MainForm : Form
 {
+    private static readonly Color AppBack = Color.FromArgb(10, 14, 22);
+    private static readonly Color PanelBack = Color.FromArgb(18, 24, 36);
+    private static readonly Color PanelAlt = Color.FromArgb(25, 34, 50);
+    private static readonly Color Accent = Color.FromArgb(0, 210, 255);
+    private static readonly Color AccentSoft = Color.FromArgb(21, 94, 117);
+    private static readonly Color TextColor = Color.FromArgb(232, 239, 248);
+    private static readonly Color Muted = Color.FromArgb(148, 160, 180);
+
     private readonly AlienFxLiteServiceClient _client = new();
     private readonly ColorDialog _colorDialog = new();
     private readonly Dictionary<LightingZone, CheckBox> _zoneChecks = new();
@@ -39,10 +47,14 @@ internal sealed class MainForm : Form
     public MainForm()
     {
         Text = "AlienFx Lite";
-        MinimumSize = new Size(720, 480);
+        MinimumSize = new Size(900, 620);
         StartPosition = FormStartPosition.CenterScreen;
+        BackColor = AppBack;
+        ForeColor = TextColor;
+        Font = new Font("Bahnschrift", 10f, FontStyle.Regular, GraphicsUnit.Point);
 
         BuildLayout();
+        ApplyTheme();
         BindEvents();
 
         _effectCombo.Items.AddRange(Enum.GetValues<LightingEffect>().Cast<object>().ToArray());
@@ -52,6 +64,7 @@ internal sealed class MainForm : Form
         UpdateColorButton(_secondaryButton, _secondaryColor);
         UpdateTrackLabels();
         UpdateEffectUi();
+        UpdateZoneButtonStyles();
     }
 
     protected override async void OnLoad(EventArgs e)
@@ -73,7 +86,8 @@ internal sealed class MainForm : Form
         TableLayoutPanel root = new()
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(12),
+            BackColor = AppBack,
+            Padding = new Padding(18),
             ColumnCount = 1,
             RowCount = 3,
         };
@@ -81,11 +95,20 @@ internal sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        TableLayoutPanel header = new()
+        Panel headerShell = new()
         {
             Dock = DockStyle.Top,
+            BackColor = PanelBack,
+            Padding = new Padding(18, 16, 18, 16),
+            Margin = new Padding(0, 0, 0, 14),
+        };
+
+        TableLayoutPanel header = new()
+        {
+            Dock = DockStyle.Fill,
             ColumnCount = 2,
             AutoSize = true,
+            BackColor = PanelBack,
         };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -96,16 +119,34 @@ internal sealed class MainForm : Form
             AutoSize = true,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
+            BackColor = PanelBack,
         };
+        statusPanel.Controls.Add(new Label
+        {
+            AutoSize = true,
+            Text = "ALIENFX LITE",
+            Font = new Font("Bahnschrift SemiBold", 20f, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = TextColor,
+            Margin = new Padding(0, 0, 0, 4),
+        });
+        statusPanel.Controls.Add(new Label
+        {
+            AutoSize = true,
+            Text = "Lightweight keyboard lighting and thermal control for your Dell G3.",
+            ForeColor = Muted,
+            Margin = new Padding(0, 0, 0, 8),
+        });
         statusPanel.Controls.Add(_serviceStatusLabel);
         statusPanel.Controls.Add(_deviceStatusLabel);
         header.Controls.Add(statusPanel, 0, 0);
         header.Controls.Add(_refreshButton, 1, 0);
+        headerShell.Controls.Add(header);
 
         TableLayoutPanel content = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
+            BackColor = AppBack,
         };
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
@@ -118,11 +159,12 @@ internal sealed class MainForm : Form
         Label footer = new()
         {
             Dock = DockStyle.Fill,
-            Text = "The UI stays unelevated. Fan and lighting commands go through the local broker service.",
+            Text = "The UI stays unelevated. Lighting and fan commands go through the local broker service.",
             AutoSize = true,
+            ForeColor = Muted,
         };
 
-        root.Controls.Add(header, 0, 0);
+        root.Controls.Add(headerShell, 0, 0);
         root.Controls.Add(content, 0, 1);
         root.Controls.Add(footer, 0, 2);
         Controls.Add(root);
@@ -141,8 +183,9 @@ internal sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 7,
+            RowCount = 8,
             AutoSize = true,
+            BackColor = PanelBack,
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -152,6 +195,7 @@ internal sealed class MainForm : Form
             Dock = DockStyle.Fill,
             AutoSize = true,
             WrapContents = true,
+            BackColor = PanelBack,
         };
         AddZoneCheckbox(zonesPanel, LightingZone.KbLeft, "KB Left");
         AddZoneCheckbox(zonesPanel, LightingZone.KbCenter, "KB Center");
@@ -167,24 +211,31 @@ internal sealed class MainForm : Form
         layout.Controls.Add(_secondaryLabel, 0, 3);
         layout.Controls.Add(_secondaryButton, 1, 3);
 
-        FlowLayoutPanel speedPanel = new() { Dock = DockStyle.Fill, AutoSize = true };
+        FlowLayoutPanel speedPanel = new() { Dock = DockStyle.Fill, AutoSize = true, BackColor = PanelBack };
         speedPanel.Controls.Add(_speedTrack);
         speedPanel.Controls.Add(_speedValueLabel);
         layout.Controls.Add(_speedLabel, 0, 4);
         layout.Controls.Add(speedPanel, 1, 4);
 
-        FlowLayoutPanel brightnessPanel = new() { Dock = DockStyle.Fill, AutoSize = true };
+        FlowLayoutPanel brightnessPanel = new() { Dock = DockStyle.Fill, AutoSize = true, BackColor = PanelBack };
         brightnessPanel.Controls.Add(_brightnessTrack);
         brightnessPanel.Controls.Add(_brightnessValueLabel);
         layout.Controls.Add(new Label { Text = "Brightness", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 5);
         layout.Controls.Add(brightnessPanel, 1, 5);
 
-        FlowLayoutPanel optionsPanel = new() { Dock = DockStyle.Fill, AutoSize = true };
+        FlowLayoutPanel optionsPanel = new() { Dock = DockStyle.Fill, AutoSize = true, BackColor = PanelBack };
         optionsPanel.Controls.Add(_keepAliveCheck);
         optionsPanel.Controls.Add(_enabledCheck);
-        optionsPanel.Controls.Add(_applyLightingButton);
         layout.Controls.Add(new Label { Text = "Options", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 6);
         layout.Controls.Add(optionsPanel, 1, 6);
+
+        layout.Controls.Add(new Label
+        {
+            Text = "Apply",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+        }, 0, 7);
+        layout.Controls.Add(_applyLightingButton, 1, 7);
 
         group.Controls.Add(layout);
         return group;
@@ -204,12 +255,13 @@ internal sealed class MainForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 4,
+            BackColor = PanelBack,
         };
 
         layout.Controls.Add(_fanModeLabel, 0, 0);
         layout.Controls.Add(_fanRpmLabel, 0, 1);
 
-        FlowLayoutPanel buttons = new() { Dock = DockStyle.Top, AutoSize = true };
+        FlowLayoutPanel buttons = new() { Dock = DockStyle.Top, AutoSize = true, BackColor = PanelBack };
         buttons.Controls.Add(_fanAutoButton);
         buttons.Controls.Add(_fanMaxButton);
         layout.Controls.Add(buttons, 0, 2);
@@ -222,6 +274,99 @@ internal sealed class MainForm : Form
 
         group.Controls.Add(layout);
         return group;
+    }
+
+    private void ApplyTheme()
+    {
+        _serviceStatusLabel.ForeColor = Accent;
+        _deviceStatusLabel.ForeColor = Muted;
+        _fanModeLabel.ForeColor = TextColor;
+        _fanRpmLabel.ForeColor = Muted;
+        _speedValueLabel.ForeColor = Accent;
+        _brightnessValueLabel.ForeColor = Accent;
+        _secondaryLabel.ForeColor = Muted;
+        _speedLabel.ForeColor = Muted;
+
+        StyleButton(_refreshButton, PanelAlt, TextColor, false);
+        StyleButton(_primaryButton, PanelAlt, TextColor, false);
+        StyleButton(_secondaryButton, PanelAlt, TextColor, false);
+        StyleButton(_fanAutoButton, PanelAlt, TextColor, false);
+        StyleButton(_fanMaxButton, AccentSoft, TextColor, true);
+        StyleButton(_applyLightingButton, AccentSoft, TextColor, true);
+
+        _effectCombo.BackColor = PanelAlt;
+        _effectCombo.ForeColor = TextColor;
+        _effectCombo.FlatStyle = FlatStyle.Flat;
+
+        _keepAliveCheck.ForeColor = TextColor;
+        _enabledCheck.ForeColor = TextColor;
+
+        foreach (CheckBox check in _zoneChecks.Values)
+        {
+            check.Appearance = Appearance.Button;
+            check.AutoSize = false;
+            check.Size = new Size(150, 48);
+            check.TextAlign = ContentAlignment.MiddleCenter;
+            check.FlatStyle = FlatStyle.Flat;
+            check.UseVisualStyleBackColor = false;
+            check.FlatAppearance.BorderSize = 1;
+        }
+
+        ApplyThemeToControlTree(this);
+    }
+
+    private void StyleButton(Button button, Color backColor, Color foreColor, bool accent)
+    {
+        button.AutoSize = false;
+        button.Height = button == _applyLightingButton ? 44 : 38;
+        if (button == _applyLightingButton)
+        {
+            button.Width = 220;
+            button.Font = new Font("Bahnschrift SemiBold", 11f, FontStyle.Bold, GraphicsUnit.Point);
+        }
+
+        button.BackColor = backColor;
+        button.ForeColor = foreColor;
+        button.FlatStyle = FlatStyle.Flat;
+        button.UseVisualStyleBackColor = false;
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.BorderColor = accent ? Accent : Muted;
+        button.FlatAppearance.MouseOverBackColor = accent ? Color.FromArgb(26, 126, 149) : Color.FromArgb(34, 46, 67);
+        button.FlatAppearance.MouseDownBackColor = accent ? Color.FromArgb(18, 88, 104) : Color.FromArgb(28, 38, 55);
+        button.Margin = new Padding(0, 0, 10, 0);
+    }
+
+    private void ApplyThemeToControlTree(Control parent)
+    {
+        foreach (Control control in parent.Controls)
+        {
+            switch (control)
+            {
+                case GroupBox groupBox:
+                    groupBox.BackColor = PanelBack;
+                    groupBox.ForeColor = TextColor;
+                    break;
+                case Panel flow:
+                    if (flow.BackColor == default)
+                    {
+                        flow.BackColor = PanelBack;
+                    }
+                    break;
+                case Label label when label != _serviceStatusLabel &&
+                                       label != _deviceStatusLabel &&
+                                       label != _fanModeLabel &&
+                                       label != _fanRpmLabel &&
+                                       label != _speedValueLabel &&
+                                       label != _brightnessValueLabel:
+                    label.ForeColor = Muted;
+                    break;
+            }
+
+            if (control.HasChildren)
+            {
+                ApplyThemeToControlTree(control);
+            }
+        }
     }
 
     private void BindEvents()
@@ -257,11 +402,15 @@ internal sealed class MainForm : Form
         CheckBox check = new()
         {
             Text = text,
-            AutoSize = true,
             Checked = true,
+            Margin = new Padding(0, 0, 10, 10),
         };
         _zoneChecks[zone] = check;
-        check.CheckedChanged += (_, _) => MarkLightingDirty();
+        check.CheckedChanged += (_, _) =>
+        {
+            UpdateZoneButtonStyles();
+            MarkLightingDirty();
+        };
         parent.Controls.Add(check);
     }
 
@@ -280,7 +429,8 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            _serviceStatusLabel.Text = "Service: unavailable";
+            _serviceStatusLabel.Text = "Broker: unavailable";
+            _serviceStatusLabel.ForeColor = Color.FromArgb(255, 111, 145);
             _deviceStatusLabel.Text = ex.Message;
             _fanModeLabel.Text = "Fan mode: unavailable";
             _fanRpmLabel.Text = "RPM: n/a";
@@ -344,8 +494,9 @@ internal sealed class MainForm : Form
 
     private void ApplyStatus(StatusSnapshot status, bool preservePendingLighting)
     {
-        _serviceStatusLabel.Text = "Service: connected";
-        _deviceStatusLabel.Text = $"Lighting: {(status.Devices.LightingAvailable ? status.Devices.LightingDevice : "unavailable")} | Fans: {(status.Devices.FanAvailable ? status.Devices.FanProvider : "unavailable")}";
+        _serviceStatusLabel.Text = "Broker: connected";
+        _serviceStatusLabel.ForeColor = Accent;
+        _deviceStatusLabel.Text = $"Lighting: {(status.Devices.LightingAvailable ? "online" : "unavailable")} | Fans: {(status.Devices.FanAvailable ? "online" : "unavailable")}";
         _fanModeLabel.Text = $"Fan mode: {status.Fan.Mode}";
         _fanRpmLabel.Text = status.Fan.Rpm.Count > 0
             ? $"RPM: {string.Join(" / ", status.Fan.Rpm)}"
@@ -387,7 +538,8 @@ internal sealed class MainForm : Form
 
         UpdateTrackLabels();
         UpdateEffectUi();
-        }
+        UpdateZoneButtonStyles();
+    }
         finally
         {
             _loadingLightingState = false;
@@ -453,6 +605,16 @@ internal sealed class MainForm : Form
     private void UpdateApplyButtonState()
     {
         _applyLightingButton.Text = _lightingDirty ? "Apply Lights*" : "Apply Lights";
+    }
+
+    private void UpdateZoneButtonStyles()
+    {
+        foreach (CheckBox check in _zoneChecks.Values)
+        {
+            check.BackColor = check.Checked ? AccentSoft : PanelAlt;
+            check.ForeColor = check.Checked ? Accent : TextColor;
+            check.FlatAppearance.BorderColor = check.Checked ? Accent : Muted;
+        }
     }
 
     private static void UpdateColorButton(Button button, Color color)

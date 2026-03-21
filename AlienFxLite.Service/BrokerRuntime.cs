@@ -252,6 +252,12 @@ internal sealed class BrokerRuntime : IDisposable
                 return Error(request.RequestId, ServiceResponseCodes.HardwareUnavailable, _lastLightingError ?? "Lighting device unavailable.", _lightingState);
             }
 
+            if (!_lightingController.PersistDefaultState(_lightingState, out string? persistError) &&
+                !string.IsNullOrWhiteSpace(persistError))
+            {
+                _diagnostics.Warn($"Saved lighting sync failed: {persistError}");
+            }
+
             return Ok(request.RequestId, _lightingState);
         }
     }
