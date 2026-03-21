@@ -38,10 +38,20 @@ jobs:
         shell: pwsh
         run: |
           $installer = Get-ChildItem .\artifacts\release\AlienFxLite-Setup-win-x64-v*.exe | Select-Object -First 1
-          & $installer.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          $installerLog = Join-Path $PWD 'artifacts\release\installer-smoke.log'
+          & $installer.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/LOG=$installerLog"
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path $installerLog) {
+              Get-Content $installerLog
+            }
+            throw "Installer exited with code $LASTEXITCODE."
+          }
           Start-Sleep -Seconds 5
           $service = Get-Service AlienFxLiteService -ErrorAction Stop
           if ($service.Status -ne 'Running') {
+            if (Test-Path $installerLog) {
+              Get-Content $installerLog
+            }
             throw "AlienFxLiteService is not running after installer smoke test."
           }
           .\artifacts\staging\tool\AlienFxLite.Tool.exe status

@@ -33,14 +33,14 @@ public static class ServiceInstaller
         if (ServiceExists())
         {
             StopServiceIfNeeded();
-            RunSc($"delete \"{ServiceName}\"");
+            RunSc("delete", ServiceName);
             WaitForDeleted();
         }
 
-        RunSc($"create \"{ServiceName}\" binPath= \"\\\"{resolvedBinaryPath}\\\"\" DisplayName= \"{DisplayName}\" start= auto");
-        RunSc($"description \"{ServiceName}\" \"{Description}\"");
-        RunSc($"config \"{ServiceName}\" obj= LocalSystem start= delayed-auto");
-        RunSc($"failure \"{ServiceName}\" reset= 86400 actions= restart/60000");
+        RunSc("create", ServiceName, "binPath=", $"\"{resolvedBinaryPath}\"", "DisplayName=", DisplayName, "start=", "auto");
+        RunSc("description", ServiceName, Description);
+        RunSc("config", ServiceName, "obj=", "LocalSystem", "start=", "delayed-auto");
+        RunSc("failure", ServiceName, "reset=", "86400", "actions=", "restart/60000");
 
         using ServiceController controller = new(ServiceName);
         controller.Start();
@@ -57,7 +57,7 @@ public static class ServiceInstaller
         }
 
         StopServiceIfNeeded();
-        RunSc($"delete \"{ServiceName}\"");
+        RunSc("delete", ServiceName);
         WaitForDeleted();
     }
 
@@ -117,15 +117,20 @@ public static class ServiceInstaller
         throw new global::System.TimeoutException($"Timed out waiting for service '{ServiceName}' to be deleted.");
     }
 
-    private static void RunSc(string arguments)
+    private static void RunSc(params string[] arguments)
     {
-        ProcessStartInfo startInfo = new("sc.exe", arguments)
+        ProcessStartInfo startInfo = new("sc.exe")
         {
             UseShellExecute = false,
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             CreateNoWindow = true,
         };
+
+        foreach (string argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
 
         using Process process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start sc.exe.");
@@ -135,8 +140,12 @@ public static class ServiceInstaller
 
         if (process.ExitCode != 0)
         {
+            string renderedArguments = string.Join(" ", arguments.Select(RenderArgument));
             throw new InvalidOperationException(
-                $"sc.exe {arguments} failed with exit code {process.ExitCode}.{Environment.NewLine}{stdOut}{stdErr}".Trim());
+                $"sc.exe {renderedArguments} failed with exit code {process.ExitCode}.{Environment.NewLine}{stdOut}{stdErr}".Trim());
         }
     }
+
+    private static string RenderArgument(string argument) =>
+        argument.Any(char.IsWhiteSpace) ? $"\"{argument}\"" : argument;
 }

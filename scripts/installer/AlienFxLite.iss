@@ -46,11 +46,11 @@ Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#AppExeName}"; Parameters: "--install-service --binary-path ""{app}\{#AppExeName}"""; Flags: runhidden waituntilterminated; StatusMsg: "Installing the AlienFx Lite broker service..."
+Filename: "{app}\{#AppExeName}"; Parameters: "--install-service --binary-path ""{app}\{#AppExeName}"""; WorkingDir: "{app}"; Flags: runhidden runascurrentuser waituntilterminated logoutput; StatusMsg: "Installing the AlienFx Lite broker service..."
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{app}\{#AppExeName}"; Parameters: "--uninstall-service"; Flags: runhidden waituntilterminated skipifdoesntexist
+Filename: "{app}\{#AppExeName}"; Parameters: "--uninstall-service"; WorkingDir: "{app}"; RunOnceId: "AlienFxLite.DelService"; Flags: runhidden runascurrentuser waituntilterminated logoutput skipifdoesntexist
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{commonappdata}\AlienFxLite"
