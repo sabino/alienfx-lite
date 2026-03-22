@@ -37,6 +37,17 @@ internal static class AlienFxNativeBridge
         public uint SecondaryColor;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeGlobalEffect
+    {
+        public byte EffectType;
+        public byte Mode;
+        public byte ColorCount;
+        public byte SpeedPercent;
+        public uint PrimaryColor;
+        public uint SecondaryColor;
+    }
+
     [DllImport(LibraryName, CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int AfxLiteEnumerateDevices(
         [Out] NativeDeviceInfo[]? devices,
@@ -53,6 +64,12 @@ internal static class AlienFxNativeBridge
         int brightnessPercent,
         int persistDefault,
         int includePowerLights);
+
+    [DllImport(LibraryName, CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int AfxLiteApplyGlobalEffect(
+        string deviceId,
+        NativeGlobalEffect effect,
+        int brightnessPercent);
 
     [DllImport(LibraryName, CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int AfxLiteGetLastError(
@@ -124,6 +141,32 @@ internal static class AlienFxNativeBridge
             brightnessPercent,
             persistDefault ? 1 : 0,
             includePowerLights ? 1 : 0));
+    }
+
+    public static void ApplyGlobalEffect(
+        string deviceId,
+        LightingEffect effect,
+        int speedPercent,
+        RgbColor primaryColor,
+        RgbColor? secondaryColor,
+        int brightnessPercent)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            throw new InvalidOperationException("A lighting device identifier is required.");
+        }
+
+        NativeGlobalEffect request = new()
+        {
+            EffectType = (byte)effect,
+            Mode = 1,
+            ColorCount = secondaryColor is null ? (byte)1 : (byte)2,
+            SpeedPercent = (byte)Math.Clamp(speedPercent, 0, 100),
+            PrimaryColor = ToPackedColor(primaryColor),
+            SecondaryColor = ToPackedColor(secondaryColor ?? new RgbColor(0, 0, 0)),
+        };
+
+        ThrowIfFailed(AfxLiteApplyGlobalEffect(deviceId, request, brightnessPercent));
     }
 
     public static string GetProtocolLabel(int apiVersion) => apiVersion switch

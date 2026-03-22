@@ -337,6 +337,7 @@ internal sealed class AlienFxMappingCatalog
                 displayName,
                 surface.VendorId,
                 surface.ProductId,
+                0,
                 surface.Name,
                 "AlienFX",
                 zones,

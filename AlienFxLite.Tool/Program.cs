@@ -146,6 +146,13 @@ internal static class Program
             .Select(zone => ParseZone(zone, profile))
             .ToList();
 
+        if (LightingEffectCatalog.RequiresWholeDeviceSelection(profile, effect) &&
+            zoneIds.Distinct().Count() != profile.Zones.Count)
+        {
+            throw new InvalidOperationException(
+                $"Effect '{effect}' applies to the whole API v5 surface. Select all {profile.Zones.Count} zones.");
+        }
+
         return new SetLightingStateRequest(profile.DeviceKey, zoneIds, effect, primary, secondary, speed, brightness, keepAlive, enabled);
     }
 

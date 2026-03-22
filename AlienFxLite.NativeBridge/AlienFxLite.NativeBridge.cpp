@@ -167,6 +167,78 @@ namespace
         }
     }
 
+    bool TryMapGlobalEffect(const Afx_device* device, const AfxLiteGlobalEffect& request, byte& effectType, byte& mode, byte& colorCount)
+    {
+        if (device == nullptr)
+        {
+            return false;
+        }
+
+        mode = device->version == API_V8 ? 1 : 0;
+
+        switch (device->version)
+        {
+        case API_V5:
+            switch (request.effectType)
+            {
+            case AlienFX_A_Color:
+                effectType = 1;
+                colorCount = 1;
+                return true;
+            case AlienFX_A_Pulse:
+                effectType = 8;
+                colorCount = 1;
+                return true;
+            case AlienFX_A_Morph:
+                effectType = 9;
+                colorCount = 2;
+                return true;
+            case AlienFX_A_Breathing:
+                effectType = 2;
+                colorCount = 1;
+                return true;
+            case AlienFX_A_Rainbow:
+                effectType = 14;
+                colorCount = 3;
+                return true;
+            default:
+                return false;
+            }
+        case API_V8:
+            switch (request.effectType)
+            {
+            case AlienFX_A_Color:
+                effectType = 1;
+                colorCount = 1;
+                return true;
+            case AlienFX_A_Pulse:
+                effectType = 2;
+                colorCount = 1;
+                return true;
+            case AlienFX_A_Morph:
+                effectType = 1;
+                colorCount = 2;
+                return true;
+            case AlienFX_A_Breathing:
+                effectType = 7;
+                colorCount = 1;
+                return true;
+            case AlienFX_A_Spectrum:
+                effectType = 8;
+                colorCount = 3;
+                return true;
+            case AlienFX_A_Rainbow:
+                effectType = 16;
+                colorCount = 3;
+                return true;
+            default:
+                return false;
+            }
+        default:
+            return false;
+        }
+    }
+
     bool ApplyBrightness(Afx_device* device, const uint8_t* lightIds, int32_t lightIdCount, int32_t brightnessPercent, int32_t includePowerLights)
     {
         if (brightnessPercent < 0 || device == nullptr || device->dev == nullptr)
@@ -318,10 +390,19 @@ extern "C" int32_t AfxLiteApplyGlobalEffect(
         return AfxLiteBridgeStatus_Unsupported;
     }
 
+    byte effectType = 0;
+    byte mode = 0;
+    byte colorCount = 0;
+    if (!TryMapGlobalEffect(device, effect, effectType, mode, colorCount))
+    {
+        SetLastError(L"The requested global lighting effect is not supported for this device.");
+        return AfxLiteBridgeStatus_Unsupported;
+    }
+
     if (!device->dev->SetGlobalEffects(
-            effect.effectType,
-            effect.mode,
-            effect.colorCount,
+            effectType,
+            mode,
+            colorCount,
             MapSpeedToTempo(effect.speedPercent),
             ToColor(effect.primaryColor),
             ToColor(effect.secondaryColor)))

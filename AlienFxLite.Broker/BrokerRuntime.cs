@@ -252,6 +252,16 @@ internal sealed class BrokerRuntime : IDisposable
                     GetOrCreateLightingState(profile));
             }
 
+            if (LightingEffectCatalog.RequiresWholeDeviceSelection(profile, payload.Effect) &&
+                payload.ZoneIds.Distinct().Count() != profile.Zones.Count)
+            {
+                return Error(
+                    request.RequestId,
+                    ServiceResponseCodes.InvalidRequest,
+                    $"Effect '{payload.Effect}' applies to the whole API v5 surface. Select all {profile.Zones.Count} zones before applying it.",
+                    GetOrCreateLightingState(profile));
+            }
+
             LightingSnapshot snapshot = GetOrCreateLightingState(profile);
             Dictionary<int, ZoneLightingState> zones = snapshot.ZoneStates.ToDictionary(static state => state.ZoneId);
             foreach (int zoneId in payload.ZoneIds.Distinct())
@@ -638,6 +648,18 @@ internal sealed class BrokerRuntime : IDisposable
                 : CreateDefaultZoneState(zone.ZoneId))
             .OrderBy(static zone => zone.ZoneId)
             .ToList();
+
+        if (profile.ApiVersion == 5)
+        {
+            ZoneLightingState? animated = zones.FirstOrDefault(static zone => LightingEffectCatalog.IsAnimated(zone.Effect));
+            if (animated is not null)
+            {
+                zones = profile.Zones
+                    .Select(zone => animated with { ZoneId = zone.ZoneId, Enabled = true })
+                    .OrderBy(static zone => zone.ZoneId)
+                    .ToList();
+            }
+        }
 
         return new LightingSnapshot(
             snapshot.Enabled,

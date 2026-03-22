@@ -125,6 +125,17 @@ public sealed class AlienFxLightingController : IDisposable
             return false;
         }
 
+        if (TryApplyGlobalEffect(profile, nativeDevice, snapshot, out error))
+        {
+            _currentProfile = profile;
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            return false;
+        }
+
         Dictionary<int, LightingZoneDefinition> zonesById = profile.Zones.ToDictionary(static zone => zone.ZoneId);
         List<NativeLightingActionRequest> actions = [];
         foreach (ZoneLightingState zoneState in snapshot.ZoneStates.OrderBy(static state => state.ZoneId))
@@ -184,6 +195,68 @@ public sealed class AlienFxLightingController : IDisposable
         return true;
     }
 
+    private static bool TryApplyGlobalEffect(
+        LightingDeviceProfile profile,
+        NativeLightingDevice nativeDevice,
+        LightingSnapshot snapshot,
+        out string? error)
+    {
+        error = null;
+        if (nativeDevice.ApiVersion != 5)
+        {
+            return false;
+        }
+
+        ZoneLightingState[] enabledStates = snapshot.ZoneStates
+            .Where(static state => state.Enabled)
+            .OrderBy(static state => state.ZoneId)
+            .ToArray();
+
+        ZoneLightingState? animated = enabledStates.FirstOrDefault(static state => LightingEffectCatalog.IsAnimated(state.Effect));
+        if (animated is null)
+        {
+            return false;
+        }
+
+        if (enabledStates.Length != profile.Zones.Count)
+        {
+            error = "API v5 animation effects apply to the whole surface. Select every zone before applying this effect.";
+            return false;
+        }
+
+        bool consistent = enabledStates.All(state =>
+            state.Effect == animated.Effect &&
+            state.Speed == animated.Speed &&
+            state.PrimaryColor.Equals(animated.PrimaryColor) &&
+            Nullable.Equals(state.SecondaryColor, animated.SecondaryColor));
+
+        if (!consistent)
+        {
+            error = "API v5 animation effects require one shared effect, speed, and color set across the whole surface.";
+            return false;
+        }
+
+        if (!LightingEffectCatalog.SupportsEffect(profile, animated.Effect))
+        {
+            error = $"The selected effect '{animated.Effect}' is not supported by this API v5 surface.";
+            return false;
+        }
+
+        int brightness = profile.SupportsBrightness
+            ? snapshot.Enabled ? Math.Clamp(snapshot.Brightness, 0, 100) : 0
+            : -1;
+
+        AlienFxNativeBridge.ApplyGlobalEffect(
+            nativeDevice.DeviceId,
+            animated.Effect,
+            animated.Speed,
+            animated.PrimaryColor,
+            animated.SecondaryColor,
+            brightness);
+
+        return true;
+    }
+
     private bool RefreshProfiles(out string? error)
     {
         error = null;
@@ -230,6 +303,7 @@ public sealed class AlienFxLightingController : IDisposable
                 {
                     DeviceKey = runtimeKey,
                     DisplayName = displayName,
+                    ApiVersion = nativeDevice.ApiVersion,
                     Protocol = AlienFxNativeBridge.GetProtocolLabel(nativeDevice.ApiVersion),
                     SupportsBrightness = nativeDevice.SupportsBrightness,
                     SupportsPersistence = nativeDevice.SupportsPersistence,

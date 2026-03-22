@@ -150,6 +150,19 @@ public partial class MainWindow : Window
             }
 
             LightingEffect effect = (LightingEffect)(EffectCombo.SelectedItem ?? LightingEffect.Static);
+            if (LightingEffectCatalog.RequiresWholeDeviceSelection(_lightingProfile, effect) &&
+                _lightingProfile is not null &&
+                zoneIds.Count != _lightingProfile.Zones.Count)
+            {
+                WpfMessageBox.Show(
+                    this,
+                    $"'{effect}' applies to the whole API v5 surface. Select all {_lightingProfile.Zones.Count} zones before applying it.",
+                    "AlienFx Lite",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
             SetLightingStateRequest request = new(
                 _lightingProfile?.DeviceKey,
                 zoneIds,
@@ -683,8 +696,12 @@ public partial class MainWindow : Window
             selectedZones = "No zones selected";
         }
 
+        string surfaceHint = LightingEffectCatalog.RequiresWholeDeviceSelection(_lightingProfile, effect)
+            ? "  |  API v5 animation applies to the whole surface"
+            : string.Empty;
+
         LightingHintText.Text =
-            $"Selected: {selectedZones}  |  Effect: {EffectCombo.SelectedItem}  |  Brightness: {(int)BrightnessSlider.Value}%  |  KeepAlive: {(KeepAliveCheck.IsChecked == true ? "on" : "off")}";
+            $"Selected: {selectedZones}  |  Effect: {EffectCombo.SelectedItem}  |  Brightness: {(int)BrightnessSlider.Value}%  |  KeepAlive: {(KeepAliveCheck.IsChecked == true ? "on" : "off")}{surfaceHint}";
     }
 
     private IReadOnlyList<int> GetSelectedZoneIds() =>

@@ -17,6 +17,8 @@ public static class LightingEffectCatalog
     public static IReadOnlyList<LightingEffect> DefaultSupportedEffects { get; } =
         [LightingEffect.Static, LightingEffect.Pulse, LightingEffect.Morph];
 
+    public static bool IsAnimated(LightingEffect effect) => effect != LightingEffect.Static;
+
     public static IReadOnlyList<LightingEffect> GetSupportedEffects(LightingDeviceProfile? profile) =>
         profile?.SupportedEffects is { Count: > 0 } effects
             ? effects
@@ -32,6 +34,9 @@ public static class LightingEffectCatalog
         SupportsEffect(profile, effect)
             ? effect
             : GetDefaultEffect(profile);
+
+    public static bool RequiresWholeDeviceSelection(LightingDeviceProfile? profile, LightingEffect effect) =>
+        profile?.ApiVersion == 5 && IsAnimated(effect);
 }
 
 public enum FanControlMode
@@ -78,6 +83,7 @@ public sealed record LightingDeviceProfile(
     string DisplayName,
     ushort VendorId,
     ushort ProductId,
+    int ApiVersion,
     string SurfaceName,
     string Protocol,
     IReadOnlyList<LightingZoneDefinition> Zones,

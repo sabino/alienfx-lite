@@ -56,9 +56,9 @@ That script:
 
 That creates:
 
-- `artifacts\release\AlienFxLite-Setup-win-x64-v0.1.0.exe`
-- `artifacts\release\AlienFxLite-portable-win-x64-v0.1.0.zip`
-- `artifacts\release\AlienFxLite.Tool-win-x64-v0.1.0.zip`
+- `artifacts\release\AlienFxLite-Setup-win-x64-v0.2.0.exe`
+- `artifacts\release\AlienFxLite-portable-win-x64-v0.2.0.zip`
+- `artifacts\release\AlienFxLite.Tool-win-x64-v0.2.0.zip`
 - `artifacts\release\SHA256SUMS.txt`
 - `artifacts\app\AlienFxLite.exe`
 - `artifacts\tool\AlienFxLite.Tool.exe`
@@ -143,8 +143,8 @@ Or from the unified desktop binary:
 Create a release tag:
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 ## CLI Examples
@@ -162,4 +162,6 @@ git push origin v0.1.0
 - `v2/v3`: `Static`, `Pulse`, `Morph`
 - `v4/v7/v8`: `Static`, `Pulse`, `Morph`, `Breathing`, `Spectrum`, `Rainbow`
 - `v6`: `Static`, `Pulse`, `Morph`, `Breathing`
-- `v5`: `Static`
+- `v5`: `Static`, `Pulse`, `Morph`, `Breathing`, `Rainbow`
+
+For `API v5`, animated effects are whole-surface effects. The UI, broker, and CLI now enforce selecting the entire mapped surface for those animations instead of pretending they can be applied per-zone.

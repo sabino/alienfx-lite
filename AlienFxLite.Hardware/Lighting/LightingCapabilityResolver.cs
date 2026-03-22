@@ -21,7 +21,13 @@ internal static class LightingCapabilityResolver
         [LightingEffect.Static, LightingEffect.Pulse, LightingEffect.Morph, LightingEffect.Breathing];
 
     private static readonly IReadOnlyList<LightingEffect> KeyboardV5Effects =
-        [LightingEffect.Static];
+    [
+        LightingEffect.Static,
+        LightingEffect.Pulse,
+        LightingEffect.Morph,
+        LightingEffect.Breathing,
+        LightingEffect.Rainbow,
+    ];
 
     public static IReadOnlyList<LightingEffect> GetSupportedEffects(int apiVersion) => apiVersion switch
     {
