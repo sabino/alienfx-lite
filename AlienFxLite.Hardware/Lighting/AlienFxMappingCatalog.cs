@@ -11,6 +11,7 @@ internal sealed class AlienFxMappingCatalog
         };
 
     private readonly Dictionary<(ushort VendorId, ushort ProductId), IReadOnlyList<CatalogProfile>> _profiles;
+    private readonly Dictionary<(ushort VendorId, ushort ProductId), IReadOnlyList<LightingDeviceProfile>> _resolvedCandidates = [];
     private readonly Dictionary<(ushort VendorId, ushort ProductId), LightingDeviceProfile> _resolvedProfiles = [];
     private readonly Lazy<HostIdentity> _hostIdentity = new(HostModelDetector.Detect);
 
@@ -108,14 +109,46 @@ internal sealed class AlienFxMappingCatalog
             return resolved;
         }
 
-        if (!_profiles.TryGetValue(key, out IReadOnlyList<CatalogProfile>? candidates) || candidates.Count == 0)
+        IReadOnlyList<LightingDeviceProfile> ordered = FindProfiles(vendorId, productId);
+        LightingDeviceProfile? selected = ordered.FirstOrDefault();
+        if (selected is null)
         {
             return null;
         }
 
-        LightingDeviceProfile selected = SelectBestProfile(candidates, _hostIdentity.Value);
         _resolvedProfiles[key] = selected;
         return selected;
+    }
+
+    public IReadOnlyList<LightingDeviceProfile> FindProfiles(ushort vendorId, ushort productId)
+    {
+        (ushort VendorId, ushort ProductId) key = (vendorId, productId);
+        if (_resolvedCandidates.TryGetValue(key, out IReadOnlyList<LightingDeviceProfile>? cached))
+        {
+            return cached;
+        }
+
+        if (!_profiles.TryGetValue(key, out IReadOnlyList<CatalogProfile>? candidates) || candidates.Count == 0)
+        {
+            return [];
+        }
+
+        HostIdentity host = _hostIdentity.Value;
+        string? aliasedGear = ResolvePreferredGear(host);
+        IReadOnlyList<LightingDeviceProfile> ordered = candidates
+            .OrderByDescending(candidate => ScoreCandidate(candidate, host))
+            .ThenByDescending(candidate =>
+                !string.IsNullOrWhiteSpace(aliasedGear) &&
+                string.Equals(candidate.NormalizedGearName, aliasedGear, StringComparison.Ordinal))
+            .ThenByDescending(static candidate => candidate.IsKeyboardSurface)
+            .ThenByDescending(static candidate => candidate.Profile.SurfaceName.Contains("main light", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(static candidate => candidate.Profile.Zones.Count == 4)
+            .ThenBy(static candidate => candidate.Profile.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Select(static candidate => candidate.Profile)
+            .ToArray();
+
+        _resolvedCandidates[key] = ordered;
+        return ordered;
     }
 
     private static LightingDeviceProfile SelectBestProfile(IReadOnlyList<CatalogProfile> candidates, HostIdentity host)
@@ -300,12 +333,12 @@ internal sealed class AlienFxMappingCatalog
                 : gear.Name;
 
             LightingDeviceProfile profile = new(
-                $"{surface.VendorId:X4}:{surface.ProductId:X4}:{SanitizeKey(surface.Name)}",
+                $"{surface.VendorId:X4}:{surface.ProductId:X4}:{SanitizeKey(gear.Name)}:{SanitizeKey(surface.Name)}",
                 displayName,
                 surface.VendorId,
                 surface.ProductId,
                 surface.Name,
-                "AlienFX API v4",
+                "AlienFX",
                 zones,
                 previewGrid);
 

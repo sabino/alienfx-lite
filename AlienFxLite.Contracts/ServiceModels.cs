@@ -56,7 +56,12 @@ public sealed record LightingDeviceProfile(
     string SurfaceName,
     string Protocol,
     IReadOnlyList<LightingZoneDefinition> Zones,
-    LightingGridDefinition? PreviewGrid);
+    LightingGridDefinition? PreviewGrid,
+    bool SupportsBrightness = true,
+    bool SupportsPersistence = false,
+    bool SupportsGlobalEffects = false,
+    string? HardwareId = null,
+    string? HardwareDescription = null);
 
 public sealed record ZoneLightingState(
     int ZoneId,
@@ -74,6 +79,7 @@ public sealed record LightingSnapshot(
     IReadOnlyList<ZoneLightingState> ZoneStates);
 
 public sealed record SetLightingStateRequest(
+    string? DeviceKey,
     IReadOnlyList<int> ZoneIds,
     LightingEffect Effect,
     RgbColor PrimaryColor,
@@ -101,12 +107,14 @@ public sealed record DeviceStatus(
     string? LightingDevice,
     string? LightingProtocol,
     string? FanProvider,
-    LightingDeviceProfile? LightingProfile);
+    LightingDeviceProfile? LightingProfile,
+    IReadOnlyList<LightingDeviceProfile> LightingProfiles);
 
 public sealed record StatusSnapshot(
     LightingSnapshot Lighting,
     FanStatus Fan,
-    DeviceStatus Devices);
+    DeviceStatus Devices,
+    IReadOnlyList<LightingSnapshot> LightingStates);
 
 public sealed record PingResponse(
     string ServiceVersion,

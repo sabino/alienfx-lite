@@ -35,6 +35,13 @@ internal static class Program
             return 0;
         }
 
+        if (args.Length == 2 && args[0].Equals("devices", StringComparison.OrdinalIgnoreCase) && args[1].Equals("list", StringComparison.OrdinalIgnoreCase))
+        {
+            StatusSnapshot status = await client.GetStatusAsync().ConfigureAwait(false);
+            PrintDevices(status);
+            return 0;
+        }
+
         if (args.Length == 2 && args[0].Equals("service", StringComparison.OrdinalIgnoreCase) && args[1].Equals("ping", StringComparison.OrdinalIgnoreCase))
         {
             PingResponse response = await client.PingAsync().ConfigureAwait(false);
@@ -61,7 +68,7 @@ internal static class Program
         if (args.Length >= 2 && args[0].Equals("lights", StringComparison.OrdinalIgnoreCase) && args[1].Equals("apply", StringComparison.OrdinalIgnoreCase))
         {
             StatusSnapshot currentStatus = await client.GetStatusAsync().ConfigureAwait(false);
-            SetLightingStateRequest request = ParseLightApplyRequest(args.Skip(2).ToArray(), currentStatus.Devices.LightingProfile);
+            SetLightingStateRequest request = ParseLightApplyRequest(args.Skip(2).ToArray(), currentStatus.Devices.LightingProfiles, currentStatus.Devices.LightingProfile);
             LightingSnapshot snapshot = await client.SetLightingStateAsync(request).ConfigureAwait(false);
             Console.WriteLine($"Brightness: {snapshot.Brightness}");
             Console.WriteLine($"KeepAlive:  {snapshot.KeepAlive}");
@@ -74,7 +81,10 @@ internal static class Program
         return 1;
     }
 
-    private static SetLightingStateRequest ParseLightApplyRequest(string[] args, LightingDeviceProfile? profile)
+    private static SetLightingStateRequest ParseLightApplyRequest(
+        string[] args,
+        IReadOnlyList<LightingDeviceProfile> profiles,
+        LightingDeviceProfile? activeProfile)
     {
         Dictionary<string, string> options = new(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < args.Length; i += 2)
@@ -92,9 +102,18 @@ internal static class Program
             throw new InvalidOperationException("--zones is required.");
         }
 
-        if (profile is null)
+        if (profiles.Count == 0)
         {
             throw new InvalidOperationException("No active lighting profile is available.");
+        }
+
+        LightingDeviceProfile? profile = ResolveProfile(
+            options.GetValueOrDefault("--device"),
+            profiles,
+            activeProfile);
+        if (profile is null)
+        {
+            throw new InvalidOperationException("The selected lighting profile was not found.");
         }
 
         if (!options.TryGetValue("--effect", out string? effectValue) || string.IsNullOrWhiteSpace(effectValue))
@@ -121,7 +140,7 @@ internal static class Program
             .Select(zone => ParseZone(zone, profile))
             .ToList();
 
-        return new SetLightingStateRequest(zoneIds, effect, primary, secondary, speed, brightness, keepAlive, enabled);
+        return new SetLightingStateRequest(profile.DeviceKey, zoneIds, effect, primary, secondary, speed, brightness, keepAlive, enabled);
     }
 
     private static int ParseZone(string value, LightingDeviceProfile profile)
@@ -163,6 +182,7 @@ internal static class Program
         Console.WriteLine($"KeepAlive:        {status.Lighting.KeepAlive}");
         Console.WriteLine($"Lighting device:  {(status.Devices.LightingAvailable ? status.Devices.LightingDevice : "unavailable")}");
         Console.WriteLine($"Lighting profile: {status.Devices.LightingProfile?.DisplayName ?? "unavailable"}");
+        Console.WriteLine($"Profiles:         {status.Devices.LightingProfiles.Count}");
         Console.WriteLine($"Fan provider:     {(status.Devices.FanAvailable ? status.Devices.FanProvider : "unavailable")}");
         Console.WriteLine($"Fan mode:         {status.Fan.Mode}");
         Console.WriteLine($"Fan RPM:          {(status.Fan.Rpm.Count > 0 ? string.Join(", ", status.Fan.Rpm) : "n/a")}");
@@ -174,6 +194,45 @@ internal static class Program
             string zoneLabel = zoneNames.TryGetValue(zone.ZoneId, out string? name) ? $"{zone.ZoneId} ({name})" : zone.ZoneId.ToString(CultureInfo.InvariantCulture);
             Console.WriteLine($"  - {zoneLabel}: {zone.Effect} #{zone.PrimaryColor.R:X2}{zone.PrimaryColor.G:X2}{zone.PrimaryColor.B:X2}");
         }
+    }
+
+    private static void PrintDevices(StatusSnapshot status)
+    {
+        if (status.Devices.LightingProfiles.Count == 0)
+        {
+            Console.WriteLine("No lighting profiles are currently available.");
+            return;
+        }
+
+        foreach (LightingDeviceProfile profile in status.Devices.LightingProfiles)
+        {
+            Console.WriteLine($"{profile.DeviceKey}");
+            Console.WriteLine($"  {profile.DisplayName}");
+            Console.WriteLine($"  {profile.Protocol} | Zones: {profile.Zones.Count}");
+        }
+    }
+
+    private static LightingDeviceProfile? ResolveProfile(
+        string? token,
+        IReadOnlyList<LightingDeviceProfile> profiles,
+        LightingDeviceProfile? activeProfile)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return activeProfile ?? profiles.FirstOrDefault();
+        }
+
+        LightingDeviceProfile? exact = profiles.FirstOrDefault(profile =>
+            string.Equals(profile.DeviceKey, token, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null)
+        {
+            return exact;
+        }
+
+        string normalized = NormalizeZoneToken(token);
+        return profiles.FirstOrDefault(profile =>
+            NormalizeZoneToken(profile.DisplayName) == normalized ||
+            NormalizeZoneToken(profile.SurfaceName) == normalized);
     }
 
     private static string NormalizeZoneToken(string value)
@@ -191,8 +250,9 @@ internal static class Program
         Console.WriteLine("AlienFxLite.Tool usage:");
         Console.WriteLine("  status");
         Console.WriteLine("  service ping");
+        Console.WriteLine("  devices list");
         Console.WriteLine("  fans auto");
         Console.WriteLine("  fans max");
-        Console.WriteLine("  lights apply --zones 0,1 --effect static --primary FF5500 [--secondary 0000FF] [--speed 50] [--brightness 100] [--keepalive true]");
+        Console.WriteLine("  lights apply [--device <profileKey>] --zones 0,1 --effect static --primary FF5500 [--secondary 0000FF] [--speed 50] [--brightness 100] [--keepalive true]");
     }
 }

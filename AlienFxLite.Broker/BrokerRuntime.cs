@@ -26,7 +26,8 @@ internal sealed class BrokerRuntime : IDisposable
     private string? _lastLightingError;
     private string? _lastFanError;
     private ServiceConfiguration _configuration = new(null);
-    private LightingSnapshot _lightingState = StateStore.CreateDefaultState().Lighting;
+    private Dictionary<string, LightingSnapshot> _lightingStates = new(StringComparer.OrdinalIgnoreCase);
+    private string? _activeLightingDeviceKey;
     private PersistedFanState _fanState = StateStore.CreateDefaultState().Fan;
 
     public BrokerRuntime()
@@ -45,7 +46,11 @@ internal sealed class BrokerRuntime : IDisposable
         _started = true;
         _configuration = _configStore.Load();
         PersistedStateFile persistedState = _stateStore.Load();
-        _lightingState = persistedState.Lighting;
+        _lightingStates = persistedState.Lighting.Snapshots
+            .Where(static snapshot => !string.IsNullOrWhiteSpace(snapshot.DeviceKey))
+            .GroupBy(static snapshot => snapshot.DeviceKey!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.OrdinalIgnoreCase);
+        _activeLightingDeviceKey = persistedState.Lighting.ActiveDeviceKey;
         _fanState = persistedState.Fan;
         EnsureLightingProfileState();
 
@@ -171,7 +176,7 @@ internal sealed class BrokerRuntime : IDisposable
         {
             lock (_sync)
             {
-                if (_lightingState.KeepAlive)
+                if (_lightingStates.Values.Any(static snapshot => snapshot.KeepAlive))
                 {
                     EnsureLightingProfileState();
                     MaintainLightingCore();
@@ -225,18 +230,20 @@ internal sealed class BrokerRuntime : IDisposable
         SetLightingStateRequest payload = ServiceJson.Deserialize<SetLightingStateRequest>(request.Payload);
         if (payload.ZoneIds is null || payload.ZoneIds.Count == 0)
         {
-            return Error(request.RequestId, ServiceResponseCodes.InvalidRequest, "At least one lighting zone must be selected.", _lightingState);
+            return Error(request.RequestId, ServiceResponseCodes.InvalidRequest, "At least one lighting zone must be selected.", GetActiveLightingState());
         }
 
         lock (_sync)
         {
             EnsureLightingProfileState();
-            if (_lightingController.CurrentProfile is null)
+            LightingDeviceProfile? profile = ResolveActiveProfile(payload.DeviceKey);
+            if (profile is null)
             {
-                return Error(request.RequestId, ServiceResponseCodes.HardwareUnavailable, _lastLightingError ?? "Lighting device unavailable.", _lightingState);
+                return Error(request.RequestId, ServiceResponseCodes.HardwareUnavailable, _lastLightingError ?? "Lighting device unavailable.", GetActiveLightingState());
             }
 
-            Dictionary<int, ZoneLightingState> zones = _lightingState.ZoneStates.ToDictionary(state => state.ZoneId);
+            LightingSnapshot snapshot = GetOrCreateLightingState(profile);
+            Dictionary<int, ZoneLightingState> zones = snapshot.ZoneStates.ToDictionary(static state => state.ZoneId);
             foreach (int zoneId in payload.ZoneIds.Distinct())
             {
                 zones[zoneId] = new ZoneLightingState(
@@ -248,26 +255,29 @@ internal sealed class BrokerRuntime : IDisposable
                     true);
             }
 
-            _lightingState = new LightingSnapshot(
-                payload.Enabled ?? _lightingState.Enabled,
-                payload.Brightness ?? _lightingState.Brightness,
-                payload.KeepAlive ?? _lightingState.KeepAlive,
-                _lightingController.CurrentProfile.DeviceKey,
-                zones.Values.OrderBy(static state => state.ZoneId).ToArray());
+            LightingSnapshot updated = NormalizeSnapshot(profile, new LightingSnapshot(
+                payload.Enabled ?? snapshot.Enabled,
+                payload.Brightness ?? snapshot.Brightness,
+                payload.KeepAlive ?? snapshot.KeepAlive,
+                profile.DeviceKey,
+                zones.Values.OrderBy(static state => state.ZoneId).ToArray()));
 
+            _lightingStates[profile.DeviceKey] = updated;
+            _activeLightingDeviceKey = profile.DeviceKey;
             SaveState();
-            if (!ApplyLightingCore())
+
+            if (!ApplyLightingCore(profile.DeviceKey))
             {
-                return Error(request.RequestId, ServiceResponseCodes.HardwareUnavailable, _lastLightingError ?? "Lighting device unavailable.", _lightingState);
+                return Error(request.RequestId, ServiceResponseCodes.HardwareUnavailable, _lastLightingError ?? "Lighting device unavailable.", updated);
             }
 
-            if (!_lightingController.PersistDefaultState(_lightingState, out string? persistError) &&
+            if (!_lightingController.PersistDefaultState(updated, out string? persistError) &&
                 !string.IsNullOrWhiteSpace(persistError))
             {
                 _diagnostics.Warn($"Saved lighting sync failed: {persistError}");
             }
 
-            return Ok(request.RequestId, _lightingState);
+            return Ok(request.RequestId, updated);
         }
     }
 
@@ -319,15 +329,20 @@ internal sealed class BrokerRuntime : IDisposable
         lock (_sync)
         {
             EnsureLightingProfileState();
-            ApplyLightingCore();
+            ApplyAllLightingStates(keepAliveOnly: false);
             ApplyFanCore();
         }
     }
 
-    private bool ApplyLightingCore()
+    private bool ApplyLightingCore(string deviceKey)
     {
         EnsureLightingProfileState();
-        if (_lightingController.Apply(_lightingState, out string? error))
+        if (!_lightingStates.TryGetValue(deviceKey, out LightingSnapshot? snapshot))
+        {
+            return true;
+        }
+
+        if (_lightingController.Apply(snapshot, out string? error))
         {
             _lastLightingError = null;
             return true;
@@ -342,23 +357,39 @@ internal sealed class BrokerRuntime : IDisposable
         return false;
     }
 
-    private bool MaintainLightingCore()
+    private bool MaintainLightingCore() => ApplyAllLightingStates(keepAliveOnly: true);
+
+    private bool ApplyAllLightingStates(bool keepAliveOnly)
     {
         EnsureLightingProfileState();
-        if (_lightingController.Maintain(_lightingState, out string? error) ||
-            _lightingController.Apply(_lightingState, out error))
+        bool anyAttempted = false;
+        bool allSucceeded = true;
+
+        foreach (LightingSnapshot snapshot in GetAvailableLightingStates()
+                     .Where(snapshot => !keepAliveOnly || snapshot.KeepAlive))
         {
-            _lastLightingError = null;
-            return true;
+            anyAttempted = true;
+            string? error;
+            bool success = keepAliveOnly
+                ? _lightingController.Maintain(snapshot, out error) || _lightingController.Apply(snapshot, out error)
+                : _lightingController.Apply(snapshot, out error);
+
+            if (success)
+            {
+                _lastLightingError = null;
+                continue;
+            }
+
+            allSucceeded = false;
+            if (!string.Equals(_lastLightingError, error, StringComparison.Ordinal))
+            {
+                _diagnostics.Warn($"Lighting {(keepAliveOnly ? "keepalive" : "apply")} failed: {error}");
+            }
+
+            _lastLightingError = error;
         }
 
-        if (!string.Equals(_lastLightingError, error, StringComparison.Ordinal))
-        {
-            _diagnostics.Warn($"Lighting keepalive failed: {error}");
-        }
-
-        _lastLightingError = error;
-        return false;
+        return !anyAttempted || allSucceeded;
     }
 
     private bool ApplyFanCore()
@@ -390,7 +421,12 @@ internal sealed class BrokerRuntime : IDisposable
         lock (_sync)
         {
             EnsureLightingProfileState();
-            return new StatusSnapshot(_lightingState, BuildFanStatus(), BuildDeviceStatus());
+            LightingSnapshot active = GetActiveLightingState();
+            IReadOnlyList<LightingSnapshot> storedStates = _lightingStates.Values
+                .OrderBy(static snapshot => snapshot.DeviceKey, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            return new StatusSnapshot(active, BuildFanStatus(), BuildDeviceStatus(), storedStates);
         }
     }
 
@@ -424,14 +460,18 @@ internal sealed class BrokerRuntime : IDisposable
         }
     }
 
-    private DeviceStatus BuildDeviceStatus() =>
-        new(
-            _lightingController.IsAvailable,
+    private DeviceStatus BuildDeviceStatus()
+    {
+        LightingDeviceProfile? activeProfile = ResolveActiveProfile(_activeLightingDeviceKey);
+        return new DeviceStatus(
+            _lightingController.AvailableProfiles.Count > 0,
             _fanController.IsAvailable,
-            _lightingController.DeviceDescription,
-            _lightingController.CurrentProfile?.Protocol,
+            activeProfile?.HardwareDescription,
+            activeProfile?.Protocol,
             _fanController.IsAvailable ? "AWCCWmiMethodFunction" : null,
-            _lightingController.CurrentProfile);
+            activeProfile,
+            _lightingController.AvailableProfiles);
+    }
 
     private NamedPipeServerStream CreatePipeServer()
     {
@@ -451,7 +491,14 @@ internal sealed class BrokerRuntime : IDisposable
 
     private void SaveState()
     {
-        PersistedStateFile snapshot = new(_lightingState, _fanState);
+        PersistedStateFile snapshot = new(
+            new PersistedLightingState(
+                _activeLightingDeviceKey,
+                _lightingStates.Values
+                    .OrderBy(static lighting => lighting.DeviceKey, StringComparer.OrdinalIgnoreCase)
+                    .ToList()),
+            _fanState);
+
         _stateStore.Save(snapshot);
     }
 
@@ -482,37 +529,132 @@ internal sealed class BrokerRuntime : IDisposable
     private void EnsureLightingProfileState()
     {
         _lightingController.Probe(out _lastLightingError);
-        LightingDeviceProfile? profile = _lightingController.CurrentProfile;
+        IReadOnlyList<LightingDeviceProfile> profiles = _lightingController.AvailableProfiles;
+        if (profiles.Count == 0)
+        {
+            _activeLightingDeviceKey = null;
+            return;
+        }
+
+        Dictionary<string, LightingSnapshot> nextStates = new(StringComparer.OrdinalIgnoreCase);
+        foreach (LightingDeviceProfile profile in profiles)
+        {
+            LightingSnapshot snapshot = ResolvePersistedSnapshot(profile);
+            nextStates[profile.DeviceKey] = NormalizeSnapshot(profile, snapshot);
+        }
+
+        _lightingStates = nextStates;
+
+        LightingDeviceProfile activeProfile = ResolveActiveProfile(_activeLightingDeviceKey)
+            ?? _lightingController.CurrentProfile
+            ?? profiles[0];
+
+        _activeLightingDeviceKey = activeProfile.DeviceKey;
+        SaveState();
+    }
+
+    private LightingSnapshot ResolvePersistedSnapshot(LightingDeviceProfile profile)
+    {
+        if (_lightingStates.TryGetValue(profile.DeviceKey, out LightingSnapshot? exact))
+        {
+            return exact;
+        }
+
+        LightingSnapshot? migrated = _lightingStates.Values.FirstOrDefault(snapshot =>
+            !string.IsNullOrWhiteSpace(snapshot.DeviceKey) &&
+            (profile.DeviceKey.EndsWith($"|{snapshot.DeviceKey}", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(snapshot.DeviceKey, BuildLegacyProfileKey(profile), StringComparison.OrdinalIgnoreCase)));
+
+        return migrated ?? CreateDefaultSnapshot(profile);
+    }
+
+    private LightingSnapshot GetOrCreateLightingState(LightingDeviceProfile profile)
+    {
+        LightingSnapshot snapshot = ResolvePersistedSnapshot(profile);
+        _lightingStates[profile.DeviceKey] = snapshot;
+        return snapshot;
+    }
+
+    private LightingSnapshot GetActiveLightingState()
+    {
+        LightingDeviceProfile? profile = ResolveActiveProfile(_activeLightingDeviceKey);
         if (profile is null)
         {
-            return;
+            return CreateDefaultSnapshot(null);
         }
 
-        HashSet<int> expectedZoneIds = profile.Zones.Select(static zone => zone.ZoneId).ToHashSet();
-        bool needsReset = !string.Equals(_lightingState.DeviceKey, profile.DeviceKey, StringComparison.OrdinalIgnoreCase) ||
-                          _lightingState.ZoneStates.Any(zone => !expectedZoneIds.Contains(zone.ZoneId)) ||
-                          expectedZoneIds.Except(_lightingState.ZoneStates.Select(static zone => zone.ZoneId)).Any();
+        return _lightingStates.TryGetValue(profile.DeviceKey, out LightingSnapshot? snapshot)
+            ? snapshot
+            : CreateDefaultSnapshot(profile);
+    }
 
-        if (!needsReset)
+    private IReadOnlyList<LightingSnapshot> GetAvailableLightingStates() =>
+        _lightingController.AvailableProfiles
+            .Select(GetOrCreateLightingState)
+            .ToArray();
+
+    private LightingDeviceProfile? ResolveActiveProfile(string? deviceKey)
+    {
+        IReadOnlyList<LightingDeviceProfile> profiles = _lightingController.AvailableProfiles;
+        if (!string.IsNullOrWhiteSpace(deviceKey))
         {
-            return;
+            LightingDeviceProfile? exact = profiles.FirstOrDefault(profile =>
+                string.Equals(profile.DeviceKey, deviceKey, StringComparison.OrdinalIgnoreCase));
+            if (exact is not null)
+            {
+                return exact;
+            }
+
+            LightingDeviceProfile? migrated = profiles.FirstOrDefault(profile =>
+                profile.DeviceKey.EndsWith($"|{deviceKey}", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(BuildLegacyProfileKey(profile), deviceKey, StringComparison.OrdinalIgnoreCase));
+            if (migrated is not null)
+            {
+                return migrated;
+            }
         }
 
-        Dictionary<int, ZoneLightingState> previousZones = _lightingState.ZoneStates.ToDictionary(zone => zone.ZoneId);
-        List<ZoneLightingState> nextZones = profile.Zones
-            .Select(zone => previousZones.TryGetValue(zone.ZoneId, out ZoneLightingState? state)
+        return profiles.FirstOrDefault();
+    }
+
+    private static LightingSnapshot NormalizeSnapshot(LightingDeviceProfile profile, LightingSnapshot snapshot)
+    {
+        Dictionary<int, ZoneLightingState> existing = snapshot.ZoneStates.ToDictionary(static zone => zone.ZoneId);
+        List<ZoneLightingState> zones = profile.Zones
+            .Select(zone => existing.TryGetValue(zone.ZoneId, out ZoneLightingState? state)
                 ? state with { ZoneId = zone.ZoneId }
-                : new ZoneLightingState(zone.ZoneId, LightingEffect.Static, new RgbColor(255, 255, 255), null, 50, true))
+                : CreateDefaultZoneState(zone.ZoneId))
             .OrderBy(static zone => zone.ZoneId)
             .ToList();
 
-        _lightingState = new LightingSnapshot(
-            _lightingState.Enabled,
-            _lightingState.Brightness,
-            _lightingState.KeepAlive,
+        return new LightingSnapshot(
+            snapshot.Enabled,
+            Math.Clamp(snapshot.Brightness, 0, 100),
+            snapshot.KeepAlive,
             profile.DeviceKey,
-            nextZones);
+            zones);
+    }
 
-        SaveState();
+    private static LightingSnapshot CreateDefaultSnapshot(LightingDeviceProfile? profile) =>
+        new(
+            true,
+            100,
+            true,
+            profile?.DeviceKey,
+            profile?.Zones.Select(static zone => CreateDefaultZoneState(zone.ZoneId)).ToArray() ?? []);
+
+    private static ZoneLightingState CreateDefaultZoneState(int zoneId) =>
+        new(zoneId, LightingEffect.Static, new RgbColor(255, 255, 255), null, 50, true);
+
+    private static string BuildLegacyProfileKey(LightingDeviceProfile profile) =>
+        $"{profile.VendorId:X4}:{profile.ProductId:X4}:{SanitizeKey(profile.SurfaceName)}";
+
+    private static string SanitizeKey(string value)
+    {
+        char[] chars = value
+            .Select(static ch => char.IsLetterOrDigit(ch) ? char.ToUpperInvariant(ch) : '_')
+            .ToArray();
+
+        return new string(chars).Trim('_');
     }
 }

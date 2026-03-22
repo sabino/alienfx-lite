@@ -34,6 +34,7 @@ WizardStyle=modern
 PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#AppExeName}
+SetupIconFile={#RepoRoot}\AlienFxLite.UI\Assets\Icons\app.ico
 
 [Tasks]
 Name: desktopicon; Description: "Create a &desktop shortcut"; Flags: unchecked

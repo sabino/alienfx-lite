@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -37,10 +38,12 @@ public partial class MainWindow : Window
 
     private DesktopSettings _desktopSettings;
     private LightingDeviceProfile? _lightingProfile;
+    private Dictionary<string, LightingSnapshot> _lightingStatesByDeviceKey = new(StringComparer.OrdinalIgnoreCase);
     private DrawingColor _primaryColor = DrawingColor.White;
     private DrawingColor _secondaryColor = DrawingColor.Black;
     private bool _refreshing;
     private bool _loadingLightingState;
+    private bool _loadingLightingProfiles;
     private bool _loadingDesktopSettings;
     private bool _lightingDirty;
     private bool _allowExit;
@@ -74,6 +77,7 @@ public partial class MainWindow : Window
         _notifyIcon = CreateNotifyIcon();
 
         _loadingLightingState = true;
+        LightingProfileCombo.DisplayMemberPath = nameof(LightingDeviceProfile.DisplayName);
         EffectCombo.ItemsSource = Enum.GetValues<LightingEffect>();
         EffectCombo.SelectedItem = LightingEffect.Static;
         SpeedSlider.Value = 50;
@@ -147,6 +151,7 @@ public partial class MainWindow : Window
 
             LightingEffect effect = (LightingEffect)(EffectCombo.SelectedItem ?? LightingEffect.Static);
             SetLightingStateRequest request = new(
+                _lightingProfile?.DeviceKey,
                 zoneIds,
                 effect,
                 ToRgb(_primaryColor),
@@ -181,6 +186,19 @@ public partial class MainWindow : Window
     {
         UpdateEffectUi();
         MarkLightingDirty();
+    }
+
+    private void LightingProfileCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingLightingProfiles)
+        {
+            return;
+        }
+
+        _lightingProfile = LightingProfileCombo.SelectedItem as LightingDeviceProfile;
+        _lightingDirty = false;
+        RebuildZoneChipsAndDeck(_lightingProfile, preserveSelection: false);
+        LoadLightingSnapshot(ResolveLightingSnapshot(_lightingProfile));
     }
 
     private void SpeedSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -342,63 +360,118 @@ public partial class MainWindow : Window
         ServiceStatusText.Foreground = new SolidColorBrush(AccentStrong);
         DeviceStatusText.Text = status.Devices.LightingProfile is null
             ? $"Lighting: {(status.Devices.LightingAvailable ? "online" : "offline")}  |  Fans: {(status.Devices.FanAvailable ? "online" : "offline")}"
-            : $"{status.Devices.LightingProfile.DisplayName}  |  Fans: {(status.Devices.FanAvailable ? "online" : "offline")}";
+            : $"{status.Devices.LightingProfile.DisplayName}  |  Surfaces: {status.Devices.LightingProfiles.Count}  |  Fans: {(status.Devices.FanAvailable ? "online" : "offline")}";
         FanModeText.Text = $"Mode: {status.Fan.Mode}";
         FanRpmText.Text = status.Fan.Rpm.Count > 0
             ? $"RPM: {string.Join(" / ", status.Fan.Rpm)}"
             : $"RPM: n/a ({status.Fan.Message})";
         FanHintText.Text = status.Fan.Message;
 
-        RebuildZoneChipsAndDeck(status.Devices.LightingProfile, preservePendingLighting && _lightingDirty);
+        _lightingStatesByDeviceKey = status.LightingStates
+            .Where(static snapshot => !string.IsNullOrWhiteSpace(snapshot.DeviceKey))
+            .ToDictionary(static snapshot => snapshot.DeviceKey!, static snapshot => snapshot, StringComparer.OrdinalIgnoreCase);
+
+        string? preferredProfileKey = preservePendingLighting && _lightingDirty
+            ? _lightingProfile?.DeviceKey
+            : status.Lighting.DeviceKey;
+        UpdateLightingProfileSelector(status.Devices.LightingProfiles, preferredProfileKey);
+        RebuildZoneChipsAndDeck(_lightingProfile, preservePendingLighting && _lightingDirty);
 
         if (!preservePendingLighting)
         {
-            _loadingLightingState = true;
-            try
-            {
-                BrightnessSlider.Value = status.Lighting.Brightness;
-                KeepAliveCheck.IsChecked = status.Lighting.KeepAlive;
-                EnabledCheck.IsChecked = status.Lighting.Enabled;
-
-                ZoneLightingState? reference = status.Lighting.ZoneStates.OrderBy(static zone => zone.ZoneId).FirstOrDefault();
-                if (reference is not null)
-                {
-                    EffectCombo.SelectedItem = reference.Effect;
-                    SpeedSlider.Value = reference.Speed;
-                    _primaryColor = FromRgb(reference.PrimaryColor);
-                    _secondaryColor = reference.SecondaryColor is null ? DrawingColor.Black : FromRgb(reference.SecondaryColor.Value);
-                    UpdateColorButton(PrimaryColorButton, _primaryColor);
-                    UpdateColorButton(SecondaryColorButton, _secondaryColor);
-                }
-
-                HashSet<int> activeZones = status.Lighting.ZoneStates
-                    .Where(static zone => zone.Enabled)
-                    .Select(static zone => zone.ZoneId)
-                    .ToHashSet();
-
-                _selectedZoneIds.Clear();
-                foreach ((int zoneId, ToggleButton toggle) in _zoneButtons)
-                {
-                    bool active = activeZones.Contains(zoneId);
-                    toggle.IsChecked = active;
-                    if (active)
-                    {
-                        _selectedZoneIds.Add(zoneId);
-                    }
-                }
-            }
-            finally
-            {
-                _loadingLightingState = false;
-            }
-
-            _lightingDirty = false;
+            LoadLightingSnapshot(ResolveLightingSnapshot(_lightingProfile));
         }
 
         UpdateTrackLabels();
         UpdateEffectUi();
         UpdateApplyButtonState();
         RefreshKeyboardPreview();
+    }
+
+    private void UpdateLightingProfileSelector(IReadOnlyList<LightingDeviceProfile> profiles, string? preferredProfileKey)
+    {
+        _loadingLightingProfiles = true;
+        try
+        {
+            LightingProfileCombo.ItemsSource = profiles;
+
+            LightingDeviceProfile? selected = !string.IsNullOrWhiteSpace(preferredProfileKey)
+                ? profiles.FirstOrDefault(profile => string.Equals(profile.DeviceKey, preferredProfileKey, StringComparison.OrdinalIgnoreCase))
+                : null;
+
+            selected ??= _lightingProfile is null
+                ? null
+                : profiles.FirstOrDefault(profile => string.Equals(profile.DeviceKey, _lightingProfile.DeviceKey, StringComparison.OrdinalIgnoreCase));
+
+            selected ??= profiles.FirstOrDefault();
+
+            LightingProfileCombo.SelectedItem = selected;
+            _lightingProfile = selected;
+        }
+        finally
+        {
+            _loadingLightingProfiles = false;
+        }
+    }
+
+    private void LoadLightingSnapshot(LightingSnapshot snapshot)
+    {
+        _loadingLightingState = true;
+        try
+        {
+            BrightnessSlider.Value = snapshot.Brightness;
+            KeepAliveCheck.IsChecked = snapshot.KeepAlive;
+            EnabledCheck.IsChecked = snapshot.Enabled;
+
+            ZoneLightingState? reference = snapshot.ZoneStates.OrderBy(static zone => zone.ZoneId).FirstOrDefault();
+            if (reference is not null)
+            {
+                EffectCombo.SelectedItem = reference.Effect;
+                SpeedSlider.Value = reference.Speed;
+                _primaryColor = FromRgb(reference.PrimaryColor);
+                _secondaryColor = reference.SecondaryColor is null ? DrawingColor.Black : FromRgb(reference.SecondaryColor.Value);
+                UpdateColorButton(PrimaryColorButton, _primaryColor);
+                UpdateColorButton(SecondaryColorButton, _secondaryColor);
+            }
+
+            HashSet<int> activeZones = snapshot.ZoneStates
+                .Where(static zone => zone.Enabled)
+                .Select(static zone => zone.ZoneId)
+                .ToHashSet();
+
+            _selectedZoneIds.Clear();
+            foreach ((int zoneId, ToggleButton toggle) in _zoneButtons)
+            {
+                bool active = activeZones.Contains(zoneId);
+                toggle.IsChecked = active;
+                if (active)
+                {
+                    _selectedZoneIds.Add(zoneId);
+                }
+            }
+        }
+        finally
+        {
+            _loadingLightingState = false;
+        }
+
+        _lightingDirty = false;
+    }
+
+    private LightingSnapshot ResolveLightingSnapshot(LightingDeviceProfile? profile)
+    {
+        if (profile is not null &&
+            _lightingStatesByDeviceKey.TryGetValue(profile.DeviceKey, out LightingSnapshot? snapshot))
+        {
+            return snapshot;
+        }
+
+        return new LightingSnapshot(
+            true,
+            100,
+            true,
+            profile?.DeviceKey,
+            profile?.Zones.Select(static zone => new ZoneLightingState(zone.ZoneId, LightingEffect.Static, new RgbColor(255, 255, 255), null, 50, true)).ToArray() ?? []);
     }
 
     private void RebuildZoneChipsAndDeck(LightingDeviceProfile? profile, bool preserveSelection)
@@ -744,13 +817,34 @@ public partial class MainWindow : Window
         WinForms.NotifyIcon notifyIcon = new()
         {
             Text = "AlienFx Lite",
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = LoadNotifyIcon(),
             ContextMenuStrip = menu,
             Visible = false,
         };
 
         notifyIcon.DoubleClick += TrayOpen_Click;
         return notifyIcon;
+    }
+
+    private static System.Drawing.Icon LoadNotifyIcon()
+    {
+        try
+        {
+            string? executablePath = Process.GetCurrentProcess().MainModule?.FileName;
+            if (!string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath))
+            {
+                System.Drawing.Icon? icon = System.Drawing.Icon.ExtractAssociatedIcon(executablePath);
+                if (icon is not null)
+                {
+                    return icon;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return System.Drawing.SystemIcons.Application;
     }
 
     private void UpdateTrayVisibility()

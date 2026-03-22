@@ -22,6 +22,15 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install icon tooling
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check pillow
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y
