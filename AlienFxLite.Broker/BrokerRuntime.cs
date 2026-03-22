@@ -570,9 +570,10 @@ internal sealed class BrokerRuntime : IDisposable
             return exact;
         }
 
+        string templateKey = ExtractTemplateKey(profile.DeviceKey);
         LightingSnapshot? migrated = _lightingStates.Values.FirstOrDefault(snapshot =>
             !string.IsNullOrWhiteSpace(snapshot.DeviceKey) &&
-            (profile.DeviceKey.EndsWith($"|{snapshot.DeviceKey}", StringComparison.OrdinalIgnoreCase) ||
+            (string.Equals(ExtractTemplateKey(snapshot.DeviceKey), templateKey, StringComparison.OrdinalIgnoreCase) ||
              string.Equals(snapshot.DeviceKey, BuildLegacyProfileKey(profile), StringComparison.OrdinalIgnoreCase)));
 
         return migrated ?? CreateDefaultSnapshot(profile);
@@ -615,8 +616,9 @@ internal sealed class BrokerRuntime : IDisposable
                 return exact;
             }
 
+            string templateKey = ExtractTemplateKey(deviceKey);
             LightingDeviceProfile? migrated = profiles.FirstOrDefault(profile =>
-                profile.DeviceKey.EndsWith($"|{deviceKey}", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(ExtractTemplateKey(profile.DeviceKey), templateKey, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(BuildLegacyProfileKey(profile), deviceKey, StringComparison.OrdinalIgnoreCase));
             if (migrated is not null)
             {
@@ -668,6 +670,19 @@ internal sealed class BrokerRuntime : IDisposable
 
     private static string BuildLegacyProfileKey(LightingDeviceProfile profile) =>
         $"{profile.VendorId:X4}:{profile.ProductId:X4}:{SanitizeKey(profile.SurfaceName)}";
+
+    private static string ExtractTemplateKey(string? deviceKey)
+    {
+        if (string.IsNullOrWhiteSpace(deviceKey))
+        {
+            return string.Empty;
+        }
+
+        int separator = deviceKey.LastIndexOf('|');
+        return separator >= 0 && separator + 1 < deviceKey.Length
+            ? deviceKey[(separator + 1)..]
+            : deviceKey;
+    }
 
     private static string SanitizeKey(string value)
     {

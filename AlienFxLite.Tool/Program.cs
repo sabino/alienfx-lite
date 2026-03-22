@@ -238,8 +238,17 @@ internal static class Program
 
         string normalized = NormalizeZoneToken(token);
         return profiles.FirstOrDefault(profile =>
+            NormalizeZoneToken(ExtractTemplateKey(profile.DeviceKey)) == normalized ||
             NormalizeZoneToken(profile.DisplayName) == normalized ||
             NormalizeZoneToken(profile.SurfaceName) == normalized);
+    }
+
+    private static string ExtractTemplateKey(string value)
+    {
+        int separator = value.LastIndexOf('|');
+        return separator >= 0 && separator + 1 < value.Length
+            ? value[(separator + 1)..]
+            : value;
     }
 
     private static string NormalizeZoneToken(string value)

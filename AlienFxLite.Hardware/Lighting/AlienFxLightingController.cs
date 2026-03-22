@@ -275,10 +275,11 @@ public sealed class AlienFxLightingController : IDisposable
 
         if (!string.IsNullOrWhiteSpace(deviceKey))
         {
+            string normalizedKey = ExtractTemplateKey(deviceKey);
             LightingDeviceProfile? migrated = _profilesByKey
                 .Values
                 .FirstOrDefault(profile =>
-                    profile.DeviceKey.EndsWith($"|{deviceKey}", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(ExtractTemplateKey(profile.DeviceKey), normalizedKey, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(BuildLegacyProfileKey(profile), deviceKey, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(profile.SurfaceName, deviceKey, StringComparison.OrdinalIgnoreCase));
 
@@ -294,6 +295,19 @@ public sealed class AlienFxLightingController : IDisposable
 
     private static string BuildLegacyProfileKey(LightingDeviceProfile profile) =>
         $"{profile.VendorId:X4}:{profile.ProductId:X4}:{SanitizeKey(profile.SurfaceName)}";
+
+    private static string ExtractTemplateKey(string deviceKey)
+    {
+        if (string.IsNullOrWhiteSpace(deviceKey))
+        {
+            return string.Empty;
+        }
+
+        int separator = deviceKey.LastIndexOf('|');
+        return separator >= 0 && separator + 1 < deviceKey.Length
+            ? deviceKey[(separator + 1)..]
+            : deviceKey;
+    }
 
     private static string SanitizeKey(string value)
     {
