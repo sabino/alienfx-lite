@@ -78,8 +78,7 @@ public partial class MainWindow : Window
 
         _loadingLightingState = true;
         LightingProfileCombo.DisplayMemberPath = nameof(LightingDeviceProfile.DisplayName);
-        EffectCombo.ItemsSource = Enum.GetValues<LightingEffect>();
-        EffectCombo.SelectedItem = LightingEffect.Static;
+        UpdateEffectOptions(preserveSelection: false);
         SpeedSlider.Value = 50;
         BrightnessSlider.Value = 100;
         KeepAliveCheck.IsChecked = true;
@@ -96,6 +95,7 @@ public partial class MainWindow : Window
         UpdateColorButton(SecondaryColorButton, _secondaryColor);
         UpdateTrackLabels();
         UpdateEffectUi();
+        UpdateLightingCapabilityUi();
         UpdateApplyButtonState();
         UpdateDesktopStatus();
         UpdateUpdateUi();
@@ -198,6 +198,7 @@ public partial class MainWindow : Window
         _lightingProfile = LightingProfileCombo.SelectedItem as LightingDeviceProfile;
         _lightingDirty = false;
         RebuildZoneChipsAndDeck(_lightingProfile, preserveSelection: false);
+        UpdateEffectOptions();
         LoadLightingSnapshot(ResolveLightingSnapshot(_lightingProfile));
     }
 
@@ -376,6 +377,7 @@ public partial class MainWindow : Window
             : status.Lighting.DeviceKey;
         UpdateLightingProfileSelector(status.Devices.LightingProfiles, preferredProfileKey);
         RebuildZoneChipsAndDeck(_lightingProfile, preservePendingLighting && _lightingDirty);
+        UpdateEffectOptions();
 
         if (!preservePendingLighting)
         {
@@ -384,6 +386,7 @@ public partial class MainWindow : Window
 
         UpdateTrackLabels();
         UpdateEffectUi();
+        UpdateLightingCapabilityUi();
         UpdateApplyButtonState();
         RefreshKeyboardPreview();
     }
@@ -426,7 +429,7 @@ public partial class MainWindow : Window
             ZoneLightingState? reference = snapshot.ZoneStates.OrderBy(static zone => zone.ZoneId).FirstOrDefault();
             if (reference is not null)
             {
-                EffectCombo.SelectedItem = reference.Effect;
+                EffectCombo.SelectedItem = LightingEffectCatalog.NormalizeEffect(_lightingProfile, reference.Effect);
                 SpeedSlider.Value = reference.Speed;
                 _primaryColor = FromRgb(reference.PrimaryColor);
                 _secondaryColor = reference.SecondaryColor is null ? DrawingColor.Black : FromRgb(reference.SecondaryColor.Value);
@@ -456,6 +459,27 @@ public partial class MainWindow : Window
         }
 
         _lightingDirty = false;
+    }
+
+    private void UpdateEffectOptions(bool preserveSelection = true)
+    {
+        LightingEffect current = (LightingEffect)(EffectCombo.SelectedItem ?? LightingEffect.Static);
+        IReadOnlyList<LightingEffect> effects = LightingEffectCatalog.GetSupportedEffects(_lightingProfile);
+        LightingEffect selected = preserveSelection && effects.Contains(current)
+            ? current
+            : LightingEffectCatalog.GetDefaultEffect(_lightingProfile);
+
+        bool wasLoadingLightingState = _loadingLightingState;
+        _loadingLightingState = true;
+        try
+        {
+            EffectCombo.ItemsSource = effects;
+            EffectCombo.SelectedItem = selected;
+        }
+        finally
+        {
+            _loadingLightingState = wasLoadingLightingState;
+        }
     }
 
     private LightingSnapshot ResolveLightingSnapshot(LightingDeviceProfile? profile)
@@ -615,6 +639,19 @@ public partial class MainWindow : Window
         SecondaryPanel.Visibility = effect == LightingEffect.Morph ? Visibility.Visible : Visibility.Collapsed;
         SpeedSlider.IsEnabled = effect != LightingEffect.Static;
         SpeedValueText.IsEnabled = effect != LightingEffect.Static;
+    }
+
+    private void UpdateLightingCapabilityUi()
+    {
+        bool brightnessSupported = _lightingProfile?.SupportsBrightness != false;
+        BrightnessSlider.IsEnabled = brightnessSupported;
+        BrightnessValueText.IsEnabled = brightnessSupported;
+        EffectCombo.IsEnabled = EffectCombo.Items.Count > 0;
+
+        if (!brightnessSupported)
+        {
+            BrightnessSlider.Value = 100;
+        }
     }
 
     private void UpdateTrackLabels()
@@ -985,9 +1022,23 @@ public partial class MainWindow : Window
                 new WpfPoint(1, 1));
         }
 
+        if (effect is LightingEffect.Spectrum or LightingEffect.Rainbow)
+        {
+            GradientStopCollection stops =
+            [
+                new GradientStop(WithAlpha(MediaColor.FromRgb(255, 87, 87), 226), 0.00),
+                new GradientStop(WithAlpha(MediaColor.FromRgb(255, 197, 91), 214), 0.22),
+                new GradientStop(WithAlpha(MediaColor.FromRgb(130, 244, 104), 214), 0.48),
+                new GradientStop(WithAlpha(MediaColor.FromRgb(94, 220, 255), 220), 0.74),
+                new GradientStop(WithAlpha(MediaColor.FromRgb(209, 132, 255), 212), 1.00),
+            ];
+
+            return new LinearGradientBrush(stops, new WpfPoint(0, 0), new WpfPoint(1, 1));
+        }
+
         return new LinearGradientBrush(
-            WithAlpha(Lighten(primary, 0.18), effect == LightingEffect.Pulse ? (byte)212 : (byte)232),
-            WithAlpha(Darken(primary, 0.12), effect == LightingEffect.Pulse ? (byte)182 : (byte)214),
+            WithAlpha(Lighten(primary, 0.18), effect is LightingEffect.Pulse or LightingEffect.Breathing ? (byte)212 : (byte)232),
+            WithAlpha(Darken(primary, 0.12), effect is LightingEffect.Pulse or LightingEffect.Breathing ? (byte)182 : (byte)214),
             new WpfPoint(0, 0),
             new WpfPoint(1, 1));
     }

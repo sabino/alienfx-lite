@@ -242,6 +242,16 @@ internal sealed class BrokerRuntime : IDisposable
                 return Error(request.RequestId, ServiceResponseCodes.HardwareUnavailable, _lastLightingError ?? "Lighting device unavailable.", GetActiveLightingState());
             }
 
+            if (!LightingEffectCatalog.SupportsEffect(profile, payload.Effect))
+            {
+                string supported = string.Join(", ", LightingEffectCatalog.GetSupportedEffects(profile));
+                return Error(
+                    request.RequestId,
+                    ServiceResponseCodes.InvalidRequest,
+                    $"Effect '{payload.Effect}' is not supported for '{profile.DisplayName}'. Supported effects: {supported}.",
+                    GetOrCreateLightingState(profile));
+            }
+
             LightingSnapshot snapshot = GetOrCreateLightingState(profile);
             Dictionary<int, ZoneLightingState> zones = snapshot.ZoneStates.ToDictionary(static state => state.ZoneId);
             foreach (int zoneId in payload.ZoneIds.Distinct())
@@ -622,7 +632,7 @@ internal sealed class BrokerRuntime : IDisposable
         Dictionary<int, ZoneLightingState> existing = snapshot.ZoneStates.ToDictionary(static zone => zone.ZoneId);
         List<ZoneLightingState> zones = profile.Zones
             .Select(zone => existing.TryGetValue(zone.ZoneId, out ZoneLightingState? state)
-                ? state with { ZoneId = zone.ZoneId }
+                ? NormalizeZoneState(profile, state with { ZoneId = zone.ZoneId })
                 : CreateDefaultZoneState(zone.ZoneId))
             .OrderBy(static zone => zone.ZoneId)
             .ToList();
@@ -633,6 +643,16 @@ internal sealed class BrokerRuntime : IDisposable
             snapshot.KeepAlive,
             profile.DeviceKey,
             zones);
+    }
+
+    private static ZoneLightingState NormalizeZoneState(LightingDeviceProfile profile, ZoneLightingState state)
+    {
+        LightingEffect effect = LightingEffectCatalog.NormalizeEffect(profile, state.Effect);
+        return state with
+        {
+            Effect = effect,
+            SecondaryColor = effect == LightingEffect.Morph ? state.SecondaryColor : null,
+        };
     }
 
     private static LightingSnapshot CreateDefaultSnapshot(LightingDeviceProfile? profile) =>

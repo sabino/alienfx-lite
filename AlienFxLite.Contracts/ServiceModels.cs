@@ -7,6 +7,31 @@ public enum LightingEffect
     Static = 0,
     Pulse = 1,
     Morph = 2,
+    Breathing = 3,
+    Spectrum = 4,
+    Rainbow = 5,
+}
+
+public static class LightingEffectCatalog
+{
+    public static IReadOnlyList<LightingEffect> DefaultSupportedEffects { get; } =
+        [LightingEffect.Static, LightingEffect.Pulse, LightingEffect.Morph];
+
+    public static IReadOnlyList<LightingEffect> GetSupportedEffects(LightingDeviceProfile? profile) =>
+        profile?.SupportedEffects is { Count: > 0 } effects
+            ? effects
+            : DefaultSupportedEffects;
+
+    public static LightingEffect GetDefaultEffect(LightingDeviceProfile? profile) =>
+        GetSupportedEffects(profile).FirstOrDefault();
+
+    public static bool SupportsEffect(LightingDeviceProfile? profile, LightingEffect effect) =>
+        GetSupportedEffects(profile).Contains(effect);
+
+    public static LightingEffect NormalizeEffect(LightingDeviceProfile? profile, LightingEffect effect) =>
+        SupportsEffect(profile, effect)
+            ? effect
+            : GetDefaultEffect(profile);
 }
 
 public enum FanControlMode
@@ -60,6 +85,7 @@ public sealed record LightingDeviceProfile(
     bool SupportsBrightness = true,
     bool SupportsPersistence = false,
     bool SupportsGlobalEffects = false,
+    IReadOnlyList<LightingEffect>? SupportedEffects = null,
     string? HardwareId = null,
     string? HardwareDescription = null);
 

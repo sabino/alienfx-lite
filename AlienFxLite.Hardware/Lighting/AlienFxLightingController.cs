@@ -139,6 +139,9 @@ public sealed class AlienFxLightingController : IDisposable
                 LightingEffect.Static => 0,
                 LightingEffect.Pulse => 1,
                 LightingEffect.Morph => 2,
+                LightingEffect.Breathing => 3,
+                LightingEffect.Spectrum => 4,
+                LightingEffect.Rainbow => 5,
                 _ => 0,
             };
 
@@ -231,6 +234,7 @@ public sealed class AlienFxLightingController : IDisposable
                     SupportsBrightness = nativeDevice.SupportsBrightness,
                     SupportsPersistence = nativeDevice.SupportsPersistence,
                     SupportsGlobalEffects = nativeDevice.SupportsGlobalEffects,
+                    SupportedEffects = LightingCapabilityResolver.GetSupportedEffects(nativeDevice.ApiVersion),
                     HardwareId = nativeDevice.DeviceId,
                     HardwareDescription = nativeDevice.Description,
                 };

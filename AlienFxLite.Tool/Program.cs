@@ -128,6 +128,12 @@ internal static class Program
         }
 
         LightingEffect effect = Enum.Parse<LightingEffect>(effectValue, ignoreCase: true);
+        if (!LightingEffectCatalog.SupportsEffect(profile, effect))
+        {
+            string supported = string.Join(", ", LightingEffectCatalog.GetSupportedEffects(profile));
+            throw new InvalidOperationException($"Effect '{effect}' is not supported for '{profile.DisplayName}'. Supported effects: {supported}.");
+        }
+
         RgbColor primary = ParseColor(primaryValue);
         RgbColor? secondary = options.TryGetValue("--secondary", out string? secondaryValue) ? ParseColor(secondaryValue) : null;
         int speed = options.TryGetValue("--speed", out string? speedValue) ? int.Parse(speedValue, CultureInfo.InvariantCulture) : 50;
@@ -209,6 +215,7 @@ internal static class Program
             Console.WriteLine($"{profile.DeviceKey}");
             Console.WriteLine($"  {profile.DisplayName}");
             Console.WriteLine($"  {profile.Protocol} | Zones: {profile.Zones.Count}");
+            Console.WriteLine($"  Effects: {string.Join(", ", LightingEffectCatalog.GetSupportedEffects(profile))}");
         }
     }
 

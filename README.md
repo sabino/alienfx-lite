@@ -80,6 +80,7 @@ The desktop app includes:
 
 - lighting and fan control
 - selectable mapped lighting surfaces/profiles
+- capability-driven effect lists per mapped surface
 - minimize/close to tray
 - per-user `Start with Windows`
 - manual `Check for updates` against GitHub Releases
@@ -155,3 +156,10 @@ git push origin v0.1.0
 .\artifacts\tool\AlienFxLite.Tool.exe fans max
 .\artifacts\tool\AlienFxLite.Tool.exe lights apply --device "0|187C|0550|4|187C:0550:DELL_G5_5500:MAIN_LIGHTS" --zones left,right --effect pulse --primary FF5500 --speed 60 --brightness 100 --keepalive true
 ```
+
+`devices list` now prints the effect set supported by each detected mapped surface. Surface capability currently varies by API family:
+
+- `v2/v3`: `Static`, `Pulse`, `Morph`
+- `v4/v7/v8`: `Static`, `Pulse`, `Morph`, `Breathing`, `Spectrum`, `Rainbow`
+- `v6`: `Static`, `Pulse`, `Morph`, `Breathing`
+- `v5`: `Static`
