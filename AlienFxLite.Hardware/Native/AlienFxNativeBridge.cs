@@ -16,6 +16,9 @@ internal static class AlienFxNativeBridge
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 192)]
         public string Description;
 
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 512)]
+        public string DevicePath;
+
         public ushort VendorId;
         public ushort ProductId;
         public int ApiVersion;
@@ -93,6 +96,7 @@ internal static class AlienFxNativeBridge
             .Select(static device => new NativeLightingDevice(
                 device.DeviceId,
                 device.Description,
+                device.DevicePath,
                 device.VendorId,
                 device.ProductId,
                 device.ApiVersion,
@@ -214,6 +218,7 @@ internal static class AlienFxNativeBridge
 internal sealed record NativeLightingDevice(
     string DeviceId,
     string Description,
+    string DevicePath,
     ushort VendorId,
     ushort ProductId,
     int ApiVersion,

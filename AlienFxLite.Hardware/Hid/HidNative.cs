@@ -12,6 +12,7 @@ internal static class HidNative
     private const uint FileShareRead = 0x00000001;
     private const uint FileShareWrite = 0x00000002;
     private const uint OpenExisting = 3;
+    private const uint FileFlagSequentialScan = 0x08000000;
 
     public static IReadOnlyList<HidDeviceInfo> EnumerateDevices()
     {
@@ -64,7 +65,7 @@ internal static class HidNative
                         FileShareRead | FileShareWrite,
                         IntPtr.Zero,
                         OpenExisting,
-                        0,
+                        FileFlagSequentialScan,
                         IntPtr.Zero);
 
                     if (handle.IsInvalid)
@@ -110,7 +111,33 @@ internal static class HidNative
     }
 
     public static SafeFileHandle OpenHandle(string devicePath) =>
-        CreateFile(devicePath, GenericRead | GenericWrite, FileShareRead | FileShareWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
+        CreateFile(
+            devicePath,
+            GenericRead | GenericWrite,
+            FileShareRead | FileShareWrite,
+            IntPtr.Zero,
+            OpenExisting,
+            FileFlagSequentialScan,
+            IntPtr.Zero);
+
+    public static void ConfigureStreamingTimeouts(SafeFileHandle handle)
+    {
+        if (handle.IsInvalid)
+        {
+            return;
+        }
+
+        COMMTIMEOUTS timeouts = new()
+        {
+            ReadIntervalTimeout = 100,
+            ReadTotalTimeoutMultiplier = 0,
+            ReadTotalTimeoutConstant = 0,
+            WriteTotalTimeoutMultiplier = 10,
+            WriteTotalTimeoutConstant = 200,
+        };
+
+        SetCommTimeouts(handle, ref timeouts);
+    }
 
     [DllImport("hid.dll")]
     private static extern void HidD_GetHidGuid(out Guid hidGuid);
@@ -155,6 +182,9 @@ internal static class HidNative
         uint flagsAndAttributes,
         IntPtr templateFile);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetCommTimeouts(SafeFileHandle hFile, ref COMMTIMEOUTS lpCommTimeouts);
+
     [StructLayout(LayoutKind.Sequential)]
     private struct SP_DEVICE_INTERFACE_DATA
     {
@@ -195,6 +225,16 @@ internal static class HidNative
         public short NumberFeatureButtonCaps;
         public short NumberFeatureValueCaps;
         public short NumberFeatureDataIndices;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct COMMTIMEOUTS
+    {
+        public uint ReadIntervalTimeout;
+        public uint ReadTotalTimeoutMultiplier;
+        public uint ReadTotalTimeoutConstant;
+        public uint WriteTotalTimeoutMultiplier;
+        public uint WriteTotalTimeoutConstant;
     }
 }
 

@@ -21,6 +21,7 @@ extern "C" {
     struct AfxLiteDeviceInfo {
         wchar_t deviceId[64];
         wchar_t description[192];
+        wchar_t devicePath[512];
         uint16_t vendorId;
         uint16_t productId;
         int32_t apiVersion;

@@ -1,14 +1,18 @@
 using AlienFxLite.Contracts;
+using AlienFxLite.Hardware.Hid;
 using AlienFxLite.Hardware.Native;
 
 namespace AlienFxLite.Hardware.Lighting;
 
 public sealed class AlienFxLightingController : IDisposable
 {
+    private const byte SavedLightingBlockId = 0x61;
+
     private readonly object _sync = new();
     private readonly AlienFxMappingCatalog _catalog = AlienFxMappingCatalog.LoadDefault();
     private Dictionary<string, LightingDeviceProfile> _profilesByKey = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, NativeLightingDevice> _nativeByProfileKey = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, AlienFxV4Device> _v4DevicesByPath = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<LightingDeviceProfile> _availableProfiles = [];
     private LightingDeviceProfile? _currentProfile;
 
@@ -68,7 +72,24 @@ public sealed class AlienFxLightingController : IDisposable
     {
         lock (_sync)
         {
-            return TryApplySnapshot(snapshot, persistDefault: false, out error);
+            if (!RefreshProfiles(out error))
+            {
+                return false;
+            }
+
+            LightingDeviceProfile? profile = ResolveProfile(snapshot.DeviceKey);
+            if (profile is null)
+            {
+                error = "No supported AlienFX lighting profile is currently available.";
+                return false;
+            }
+
+            if (profile.ApiVersion == 4)
+            {
+                return TryApplyNativeSnapshot(profile, snapshot, persistDefault: false, out error);
+            }
+
+            return TryApplyNativeSnapshot(profile, snapshot, persistDefault: false, out error);
         }
     }
 
@@ -76,7 +97,24 @@ public sealed class AlienFxLightingController : IDisposable
     {
         lock (_sync)
         {
-            return TryApplySnapshot(snapshot, persistDefault: false, out error);
+            if (!RefreshProfiles(out error))
+            {
+                return false;
+            }
+
+            LightingDeviceProfile? profile = ResolveProfile(snapshot.DeviceKey);
+            if (profile is null)
+            {
+                error = "No supported AlienFX lighting profile is currently available.";
+                return false;
+            }
+
+            if (profile.ApiVersion == 4)
+            {
+                return TryApplyNativeSnapshot(profile, snapshot, persistDefault: false, out error);
+            }
+
+            return TryApplyNativeSnapshot(profile, snapshot, persistDefault: false, out error);
         }
     }
 
@@ -84,10 +122,16 @@ public sealed class AlienFxLightingController : IDisposable
     {
         lock (_sync)
         {
+            if (!RefreshProfiles(out error))
+            {
+                return false;
+            }
+
             LightingDeviceProfile? profile = ResolveProfile(snapshot.DeviceKey);
             if (profile is null)
             {
-                return RefreshProfiles(out error) && TryApplySnapshot(snapshot, persistDefault: true, out error);
+                error = "No supported AlienFX lighting profile is currently available.";
+                return false;
             }
 
             if (!profile.SupportsPersistence)
@@ -96,28 +140,28 @@ public sealed class AlienFxLightingController : IDisposable
                 return true;
             }
 
-            return TryApplySnapshot(snapshot, persistDefault: true, out error);
+            if (profile.ApiVersion == 4)
+            {
+                return TryApplyNativeSnapshot(profile, snapshot, persistDefault: true, out error);
+            }
+
+            return TryApplyNativeSnapshot(profile, snapshot, persistDefault: true, out error);
         }
     }
 
     public void Dispose()
     {
+        foreach (AlienFxV4Device device in _v4DevicesByPath.Values)
+        {
+            device.Dispose();
+        }
+
+        _v4DevicesByPath.Clear();
     }
 
-    private bool TryApplySnapshot(LightingSnapshot snapshot, bool persistDefault, out string? error)
+    private bool TryApplyNativeSnapshot(LightingDeviceProfile profile, LightingSnapshot snapshot, bool persistDefault, out string? error)
     {
         error = null;
-        if (!RefreshProfiles(out error))
-        {
-            return false;
-        }
-
-        LightingDeviceProfile? profile = ResolveProfile(snapshot.DeviceKey);
-        if (profile is null)
-        {
-            error = "No supported AlienFX lighting profile is currently available.";
-            return false;
-        }
 
         if (!_nativeByProfileKey.TryGetValue(profile.DeviceKey, out NativeLightingDevice? nativeDevice))
         {
@@ -182,16 +226,143 @@ public sealed class AlienFxLightingController : IDisposable
             .Distinct()
             .ToArray();
 
-        AlienFxNativeBridge.ApplyLighting(
-            nativeDevice.DeviceId,
-            actions,
-            brightnessLightIds,
-            brightness,
-            persistDefault && profile.SupportsPersistence,
-            includePowerLights: profile.Zones.Any(static zone => zone.IsPowerOrIndicator));
+        try
+        {
+            AlienFxNativeBridge.ApplyLighting(
+                nativeDevice.DeviceId,
+                actions,
+                brightnessLightIds,
+                brightness,
+                persistDefault && profile.SupportsPersistence,
+                includePowerLights: profile.Zones.Any(static zone => zone.IsPowerOrIndicator));
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
 
         _currentProfile = profile;
         error = null;
+        return true;
+    }
+
+    private bool TryApplyV4Snapshot(
+        LightingDeviceProfile profile,
+        LightingSnapshot snapshot,
+        bool resetDevice,
+        bool forceUpdate,
+        out string? error)
+    {
+        error = null;
+        LightingSnapshot normalized = NormalizeSnapshot(profile, snapshot with { DeviceKey = profile.DeviceKey });
+        if (!TryGetV4Device(profile, out AlienFxV4Device? device, out error) || device is null)
+        {
+            return false;
+        }
+
+        if (resetDevice && !device.Reset(out error))
+        {
+            return false;
+        }
+
+        Dictionary<int, LightingZoneDefinition> zonesById = profile.Zones.ToDictionary(static zone => zone.ZoneId);
+        bool needsUpdate = forceUpdate;
+        foreach (IGrouping<RgbColor, ZoneLightingState> staticGroup in normalized.ZoneStates
+                     .Where(static state => state.Effect == LightingEffect.Static)
+                     .GroupBy(static state => state.PrimaryColor))
+        {
+            byte[] lightIds = staticGroup
+                .SelectMany(zoneState => zonesById.TryGetValue(zoneState.ZoneId, out LightingZoneDefinition? zone)
+                    ? zone.LightIds
+                    : [])
+                .Distinct()
+                .ToArray();
+
+            if (lightIds.Length == 0)
+            {
+                continue;
+            }
+
+            if (!device.ApplyStaticZones(staticGroup.Key, lightIds, out error))
+            {
+                return false;
+            }
+        }
+
+        foreach (ZoneLightingState zoneState in normalized.ZoneStates.OrderBy(static state => state.ZoneId))
+        {
+            if (zoneState.Effect == LightingEffect.Static ||
+                !zonesById.TryGetValue(zoneState.ZoneId, out LightingZoneDefinition? zoneDefinition))
+            {
+                continue;
+            }
+
+            foreach (byte lightId in zoneDefinition.LightIds.Distinct())
+            {
+                if (!device.ApplyLight(zoneState, lightId, out error))
+                {
+                    return false;
+                }
+            }
+
+            needsUpdate = true;
+        }
+
+        if (needsUpdate && !device.UpdateColors(out error))
+        {
+            return false;
+        }
+
+        int brightness = normalized.Enabled ? normalized.Brightness : 0;
+        byte[] allLightIds = profile.Zones.SelectMany(static zone => zone.LightIds).Distinct().ToArray();
+        if (!device.SetBrightness(brightness, allLightIds, out error))
+        {
+            return false;
+        }
+
+        _currentProfile = profile;
+        return true;
+    }
+
+    private bool TryPersistV4DefaultState(LightingDeviceProfile profile, LightingSnapshot snapshot, out string? error)
+    {
+        error = null;
+        LightingSnapshot normalized = NormalizeSnapshot(profile, snapshot with { DeviceKey = profile.DeviceKey });
+        if (!TryGetV4Device(profile, out AlienFxV4Device? device, out error) || device is null)
+        {
+            return false;
+        }
+
+        if (!device.BeginSavedLightingBlock(SavedLightingBlockId, out error))
+        {
+            return false;
+        }
+
+        Dictionary<int, LightingZoneDefinition> zonesById = profile.Zones.ToDictionary(static zone => zone.ZoneId);
+        foreach (ZoneLightingState zoneState in normalized.ZoneStates.OrderBy(static state => state.ZoneId))
+        {
+            if (!zonesById.TryGetValue(zoneState.ZoneId, out LightingZoneDefinition? zoneDefinition))
+            {
+                continue;
+            }
+
+            bool success = zoneState.Effect == LightingEffect.Static
+                ? device.ApplyStaticZones(zoneState.PrimaryColor, zoneDefinition.LightIds.Distinct().ToArray(), out error)
+                : PersistAnimatedV4Zone(device, zoneState, zoneDefinition.LightIds.Distinct().ToArray(), out error);
+
+            if (!success)
+            {
+                return false;
+            }
+        }
+
+        if (!device.CommitSavedLightingBlock(SavedLightingBlockId, out error))
+        {
+            return false;
+        }
+
+        device.SetStartupLightingBlock(SavedLightingBlockId, out _);
         return true;
     }
 
@@ -246,15 +417,41 @@ public sealed class AlienFxLightingController : IDisposable
             ? snapshot.Enabled ? Math.Clamp(snapshot.Brightness, 0, 100) : 0
             : -1;
 
-        AlienFxNativeBridge.ApplyGlobalEffect(
-            nativeDevice.DeviceId,
-            animated.Effect,
-            animated.Speed,
-            animated.PrimaryColor,
-            animated.SecondaryColor,
-            brightness);
+        try
+        {
+            AlienFxNativeBridge.ApplyGlobalEffect(
+                nativeDevice.DeviceId,
+                animated.Effect,
+                animated.Speed,
+                animated.PrimaryColor,
+                animated.SecondaryColor,
+                brightness);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
 
         return true;
+    }
+
+    private static bool PersistAnimatedV4Zone(
+        AlienFxV4Device device,
+        ZoneLightingState zoneState,
+        IReadOnlyList<byte> lightIds,
+        out string? error)
+    {
+        error = null;
+        foreach (byte lightId in lightIds)
+        {
+            if (!device.ApplyLight(zoneState, lightId, out error))
+            {
+                return false;
+            }
+        }
+
+        return device.UpdateColors(out error);
     }
 
     private bool RefreshProfiles(out string? error)
@@ -365,6 +562,99 @@ public sealed class AlienFxLightingController : IDisposable
 
         return _currentProfile
             ?? _availableProfiles.FirstOrDefault();
+    }
+
+    private bool TryGetV4Device(LightingDeviceProfile profile, out AlienFxV4Device? device, out string? error)
+    {
+        error = null;
+        device = null;
+
+        if (!_nativeByProfileKey.TryGetValue(profile.DeviceKey, out NativeLightingDevice? nativeDevice) ||
+            string.IsNullOrWhiteSpace(nativeDevice.DevicePath))
+        {
+            ResetV4Connections();
+            error = $"No exact AlienFX API v4 HID path is available for '{profile.DisplayName}'.";
+            return false;
+        }
+
+        if (_v4DevicesByPath.TryGetValue(nativeDevice.DevicePath, out AlienFxV4Device? existing))
+        {
+            device = existing;
+            return true;
+        }
+
+        HidDeviceInfo? candidate = HidNative.EnumerateDevices()
+            .FirstOrDefault(deviceInfo => string.Equals(deviceInfo.DevicePath, nativeDevice.DevicePath, StringComparison.OrdinalIgnoreCase));
+
+        if (candidate is null)
+        {
+            ResetV4Connections();
+            error = $"The AlienFX API v4 HID path '{nativeDevice.DevicePath}' is no longer present.";
+            return false;
+        }
+
+        AlienFxV4Device? opened = AlienFxV4Device.Open(candidate, out error);
+        if (opened is null)
+        {
+            return false;
+        }
+
+        _v4DevicesByPath[candidate.DevicePath] = opened;
+        device = opened;
+        return true;
+    }
+
+    private static LightingSnapshot NormalizeSnapshot(LightingDeviceProfile profile, LightingSnapshot snapshot)
+    {
+        Dictionary<int, ZoneLightingState> existing = snapshot.ZoneStates.ToDictionary(static zone => zone.ZoneId);
+        List<ZoneLightingState> zones = profile.Zones
+            .Select(zone => existing.TryGetValue(zone.ZoneId, out ZoneLightingState? state)
+                ? NormalizeZoneState(profile, state with { ZoneId = zone.ZoneId })
+                : CreateDefaultZoneState(zone.ZoneId))
+            .OrderBy(static zone => zone.ZoneId)
+            .ToList();
+
+        if (profile.ApiVersion == 5)
+        {
+            ZoneLightingState? animated = zones.FirstOrDefault(static zone => LightingEffectCatalog.IsAnimated(zone.Effect));
+            if (animated is not null)
+            {
+                zones = profile.Zones
+                    .Select(zone => animated with { ZoneId = zone.ZoneId, Enabled = true })
+                    .OrderBy(static zone => zone.ZoneId)
+                    .ToList();
+            }
+        }
+
+        return new LightingSnapshot(
+            snapshot.Enabled,
+            Math.Clamp(snapshot.Brightness, 0, 100),
+            snapshot.KeepAlive,
+            profile.DeviceKey,
+            zones);
+    }
+
+    private static ZoneLightingState NormalizeZoneState(LightingDeviceProfile profile, ZoneLightingState state)
+    {
+        LightingEffect effect = LightingEffectCatalog.NormalizeEffect(profile, state.Effect);
+        return state with
+        {
+            Effect = effect,
+            SecondaryColor = effect == LightingEffect.Morph ? state.SecondaryColor : null,
+        };
+    }
+
+    private static ZoneLightingState CreateDefaultZoneState(int zoneId) =>
+        new(zoneId, LightingEffect.Static, new RgbColor(255, 255, 255), null, 50, true);
+
+    private void ResetV4Connections()
+    {
+        foreach (AlienFxV4Device device in _v4DevicesByPath.Values)
+        {
+            device.Dispose();
+        }
+
+        _v4DevicesByPath.Clear();
     }
 
     private static string BuildLegacyProfileKey(LightingDeviceProfile profile) =>

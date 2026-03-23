@@ -41,6 +41,8 @@ internal sealed class AlienFxV4Device : IDisposable
             return null;
         }
 
+        HidNative.ConfigureStreamingTimeouts(handle);
+
         error = null;
         return new AlienFxV4Device(handle, device.DevicePath, device.OutputReportLength);
     }
@@ -107,11 +109,7 @@ internal sealed class AlienFxV4Device : IDisposable
     public bool Reset(out string? error)
     {
         error = null;
-        if (!WaitForReady())
-        {
-            error = "Lighting controller did not report ready state.";
-            return false;
-        }
+        WaitForReady();
 
         if (!PrepareAndSend(CommandControl, [new CommandMod(4, [4])], out error))
         {

@@ -164,6 +164,7 @@ namespace AlienFX_SDK {
 		int version = API_UNKNOWN; // interface version, will stay at API_UNKNOWN if not initialized
 		byte bright = 64; // Last brightness set for device
 		string description; // device description
+		wstring devicePath; // raw HID path used to open the device
 
 		~Functions();
 
