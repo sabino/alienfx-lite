@@ -225,6 +225,11 @@ public sealed class AlienFxLightingController : IDisposable
                 continue;
             }
 
+            RgbColor primaryColor = ScaleColor(zoneState.PrimaryColor, zoneState.Brightness);
+            RgbColor? secondaryColor = zoneState.SecondaryColor is { } secondary
+                ? ScaleColor(secondary, zoneState.Brightness)
+                : null;
+
             byte actionType = zoneState.Effect switch
             {
                 LightingEffect.Static => 0,
@@ -242,8 +247,8 @@ public sealed class AlienFxLightingController : IDisposable
                     lightId,
                     actionType,
                     zoneState.Speed,
-                    zoneState.PrimaryColor,
-                    zoneState.SecondaryColor));
+                    primaryColor,
+                    secondaryColor));
             }
         }
 
@@ -704,12 +709,37 @@ public sealed class AlienFxLightingController : IDisposable
         return state with
         {
             Effect = effect,
-            SecondaryColor = effect == LightingEffect.Morph ? state.SecondaryColor : null,
+            SecondaryColor = LightingEffectCatalog.SupportsSecondaryColor(effect) ? state.SecondaryColor : null,
+            Speed = Math.Clamp(state.Speed, 0, 100),
+            Brightness = Math.Clamp(state.Brightness, 0, 100),
+            Palette = LightingEffectCatalog.SupportsPalette(effect)
+                ? NormalizePalette(state.Palette)
+                : null,
         };
     }
 
     private static ZoneLightingState CreateDefaultZoneState(int zoneId) =>
-        new(zoneId, LightingEffect.Static, new RgbColor(255, 255, 255), null, 50, true);
+        new(zoneId, LightingEffect.Static, new RgbColor(255, 255, 255), null, 50, true, 100, null);
+
+    private static IReadOnlyList<RgbColor> NormalizePalette(IReadOnlyList<RgbColor>? palette)
+    {
+        IReadOnlyList<RgbColor> normalized = palette is { Count: > 0 }
+            ? palette
+            : LightingEffectCatalog.DefaultSpectrumPalette;
+
+        return normalized
+            .Take(7)
+            .ToArray();
+    }
+
+    private static RgbColor ScaleColor(RgbColor color, int brightness)
+    {
+        double factor = Math.Clamp(brightness, 0, 100) / 100d;
+        return new RgbColor(
+            (byte)Math.Clamp(Math.Round(color.R * factor), 0, 255),
+            (byte)Math.Clamp(Math.Round(color.G * factor), 0, 255),
+            (byte)Math.Clamp(Math.Round(color.B * factor), 0, 255));
+    }
 
     private void ResetV4Connections()
     {
