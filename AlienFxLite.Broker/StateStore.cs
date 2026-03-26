@@ -8,7 +8,15 @@ internal sealed record PersistedFanState(
     List<int>? RawBoostPerFan,
     int? AutomaticPowerValue);
 
+internal sealed record PersistedLightingState(
+    string? ActiveDeviceKey,
+    List<LightingSnapshot> Snapshots);
+
 internal sealed record PersistedStateFile(
+    PersistedLightingState Lighting,
+    PersistedFanState Fan);
+
+internal sealed record LegacyPersistedStateFile(
     LightingSnapshot Lighting,
     PersistedFanState Fan);
 
@@ -32,7 +40,24 @@ internal sealed class StateStore
         {
             string json = File.ReadAllText(_diagnostics.StateFilePath);
             PersistedStateFile? state = JsonSerializer.Deserialize<PersistedStateFile>(json, ServiceJson.Options);
-            return state ?? CreateDefaultState();
+            if (state is not null)
+            {
+                return state;
+            }
+
+            LegacyPersistedStateFile? legacy = JsonSerializer.Deserialize<LegacyPersistedStateFile>(json, ServiceJson.Options);
+            if (legacy is not null)
+            {
+                List<LightingSnapshot> snapshots = legacy.Lighting.DeviceKey is null
+                    ? []
+                    : [legacy.Lighting];
+
+                return new PersistedStateFile(
+                    new PersistedLightingState(legacy.Lighting.DeviceKey, snapshots),
+                    legacy.Fan);
+            }
+
+            return CreateDefaultState();
         }
         catch (Exception ex)
         {
@@ -47,21 +72,8 @@ internal sealed class StateStore
         File.WriteAllText(_diagnostics.StateFilePath, json);
     }
 
-    public static PersistedStateFile CreateDefaultState()
-    {
-        List<ZoneLightingState> defaultZones =
-        [
-            CreateDefaultZone(LightingZone.KbLeft),
-            CreateDefaultZone(LightingZone.KbCenter),
-            CreateDefaultZone(LightingZone.KbRight),
-            CreateDefaultZone(LightingZone.KbNumPad),
-        ];
-
-        return new PersistedStateFile(
-            new LightingSnapshot(true, 100, true, defaultZones),
+    public static PersistedStateFile CreateDefaultState() =>
+        new(
+            new PersistedLightingState(null, []),
             new PersistedFanState(FanControlMode.Auto, null, null));
-    }
-
-    private static ZoneLightingState CreateDefaultZone(LightingZone zone) =>
-        new(zone, LightingEffect.Static, new RgbColor(255, 255, 255), null, 50, true);
 }

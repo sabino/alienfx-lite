@@ -1,8 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$Version,
-    [string]$PublishDir = (Join-Path $PSScriptRoot '..\artifacts\staging\app'),
-    [string]$OutputDir = (Join-Path $PSScriptRoot '..\artifacts\release')
+    [string]$PublishDir,
+    [string]$OutputDir
 )
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
@@ -10,6 +10,15 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+
+if ([string]::IsNullOrWhiteSpace($PublishDir)) {
+    $PublishDir = Join-Path $repoRoot 'artifacts\staging\app'
+}
+
+if ([string]::IsNullOrWhiteSpace($OutputDir)) {
+    $OutputDir = Join-Path $repoRoot 'artifacts\release'
+}
+
 $resolvedPublishDir = (Resolve-Path $PublishDir).Path
 
 if (-not (Test-Path $resolvedPublishDir -PathType Container)) {
@@ -19,8 +28,8 @@ if (-not (Test-Path $resolvedPublishDir -PathType Container)) {
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
 $candidatePaths = @(
-    (Get-Command iscc.exe -ErrorAction SilentlyContinue)?.Source,
-    (Get-Command iscc -ErrorAction SilentlyContinue)?.Source,
+    $(if ($command = Get-Command iscc.exe -ErrorAction SilentlyContinue) { $command.Source }),
+    $(if ($command = Get-Command iscc -ErrorAction SilentlyContinue) { $command.Source }),
     (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
     (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'),
     (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')

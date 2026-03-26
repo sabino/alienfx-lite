@@ -6,6 +6,7 @@
         xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         mc:Ignorable="d"
         Title="AlienFx Lite"
+        Icon="Assets/Icons/app.ico"
         Width="1280"
         Height="840"
         MinWidth="1120"
@@ -204,6 +205,7 @@
             <Setter Property="FontFamily" Value="Segoe UI Variable Text"/>
             <Setter Property="ItemContainerStyle" Value="{StaticResource GlassComboBoxItemStyle}"/>
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="MaxDropDownHeight" Value="280"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
@@ -220,6 +222,14 @@
                                             Opacity="0.22"
                                             VerticalAlignment="Top"
                                             Height="18"/>
+                                    <ToggleButton Grid.ZIndex="2"
+                                                  Focusable="False"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  ClickMode="Press"
+                                                  IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                        <Grid Background="Transparent"/>
+                                    </ToggleButton>
                                     <ContentPresenter Margin="16,0,48,0"
                                                       VerticalAlignment="Center"
                                                       HorizontalAlignment="Left"
@@ -241,6 +251,8 @@
                                    Placement="Bottom"
                                    AllowsTransparency="True"
                                    Focusable="False"
+                                   StaysOpen="False"
+                                   PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
                                    IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
                                    PopupAnimation="Fade">
                                 <Grid MinWidth="{TemplateBinding ActualWidth}"
@@ -251,9 +263,10 @@
                                             Background="#EA0C131D"
                                             BorderBrush="{StaticResource InnerBorderBrush}"
                                             BorderThickness="1">
-                                        <ScrollViewer SnapsToDevicePixels="True">
-                                            <StackPanel IsItemsHost="True"
-                                                        KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                        <ScrollViewer Margin="0"
+                                                      SnapsToDevicePixels="True"
+                                                      CanContentScroll="True">
+                                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                         </ScrollViewer>
                                     </Border>
                                 </Grid>
@@ -266,6 +279,10 @@
                             </Trigger>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
                                 <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="ComboChrome" Property="Background" Value="#7E203549"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="ComboChrome" Property="Opacity" Value="0.55"/>
@@ -430,7 +447,8 @@
 
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Keyboard Deck"/>
-                            <TextBlock Style="{StaticResource SectionHintStyle}"
+                            <TextBlock x:Name="KeyboardDeckDescriptionText"
+                                       Style="{StaticResource SectionHintStyle}"
                                        Margin="0,6,0,0"
                                        Text="This deck mirrors the 20 x 6 AlienFX keyboard grid. Click any lit region or use the zone chips below."/>
                         </StackPanel>
@@ -494,28 +512,7 @@
                             </Grid>
                         </Border>
 
-                        <WrapPanel Grid.Row="2" Margin="0,0,0,6">
-                            <primitives:ToggleButton x:Name="LeftZoneButton"
-                                                     Style="{StaticResource ZoneChipStyle}"
-                                                     Content="KB Left"
-                                                     Checked="ZoneButton_Changed"
-                                                     Unchecked="ZoneButton_Changed"/>
-                            <primitives:ToggleButton x:Name="CenterZoneButton"
-                                                     Style="{StaticResource ZoneChipStyle}"
-                                                     Content="KB Center"
-                                                     Checked="ZoneButton_Changed"
-                                                     Unchecked="ZoneButton_Changed"/>
-                            <primitives:ToggleButton x:Name="RightZoneButton"
-                                                     Style="{StaticResource ZoneChipStyle}"
-                                                     Content="KB Right"
-                                                     Checked="ZoneButton_Changed"
-                                                     Unchecked="ZoneButton_Changed"/>
-                            <primitives:ToggleButton x:Name="NumPadZoneButton"
-                                                     Style="{StaticResource ZoneChipStyle}"
-                                                     Content="KB NumPad"
-                                                     Checked="ZoneButton_Changed"
-                                                     Unchecked="ZoneButton_Changed"/>
-                        </WrapPanel>
+                        <WrapPanel x:Name="ZoneChipPanel" Grid.Row="2" Margin="0,0,0,6"/>
 
                         <TextBlock x:Name="LightingHintText"
                                    Grid.Row="3"
@@ -531,6 +528,7 @@
                     <Border Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,0,14">
                         <Grid>
                             <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
@@ -554,6 +552,22 @@
                                 <TextBlock Style="{StaticResource FieldLabelStyle}"
                                            Width="86"
                                            VerticalAlignment="Center"
+                                           Text="SURFACE"/>
+                                <ComboBox x:Name="LightingProfileCombo"
+                                          Grid.Column="1"
+                                          Height="44"
+                                          Style="{StaticResource GlassComboBoxStyle}"
+                                          SelectionChanged="LightingProfileCombo_SelectionChanged"/>
+                            </Grid>
+
+                            <Grid Grid.Row="2" Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource FieldLabelStyle}"
+                                           Width="86"
+                                           VerticalAlignment="Center"
                                            Text="EFFECT"/>
                                 <ComboBox x:Name="EffectCombo"
                                           Grid.Column="1"
@@ -562,7 +576,7 @@
                                           SelectionChanged="EffectCombo_SelectionChanged"/>
                             </Grid>
 
-                            <Grid Grid.Row="2" Margin="0,0,0,14">
+                            <Grid Grid.Row="3" Margin="0,0,0,14">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
@@ -583,7 +597,7 @@
                                 </StackPanel>
                             </Grid>
 
-                            <Grid Grid.Row="3" Margin="0,0,0,14">
+                            <Grid Grid.Row="4" Margin="0,0,0,14">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -607,7 +621,7 @@
                                            VerticalAlignment="Center"/>
                             </Grid>
 
-                            <Grid Grid.Row="4" Margin="0,0,0,16">
+                            <Grid Grid.Row="5" Margin="0,0,0,16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -631,7 +645,7 @@
                                            VerticalAlignment="Center"/>
                             </Grid>
 
-                            <Border Grid.Row="5"
+                            <Border Grid.Row="6"
                                     Padding="14"
                                     CornerRadius="18"
                                     Background="#45202A38"

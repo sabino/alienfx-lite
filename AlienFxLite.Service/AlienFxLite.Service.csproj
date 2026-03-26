@@ -5,9 +5,18 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <NativeBridgeOutput>..\AlienFxLite.NativeBridge\bin\x64\$(Configuration)\AlienFxLite.NativeBridge.dll</NativeBridgeOutput>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AlienFxLite.Broker\AlienFxLite.Broker.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('$(NativeBridgeOutput)')">
+    <Content Include="$(NativeBridgeOutput)">
+      <Link>AlienFxLite.NativeBridge.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 </Project>

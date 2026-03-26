@@ -14,10 +14,24 @@
     <UseWindowsForms>true</UseWindowsForms>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>Assets\Icons\app.ico</ApplicationIcon>
+    <NativeBridgeOutput>..\AlienFxLite.NativeBridge\bin\x64\$(Configuration)\AlienFxLite.NativeBridge.dll</NativeBridgeOutput>
   </PropertyGroup>
 
   <ItemGroup>
     <ApplicationDefinition Remove="App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Icons\app.ico" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('$(NativeBridgeOutput)')">
+    <Content Include="$(NativeBridgeOutput)">
+      <Link>AlienFxLite.NativeBridge.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

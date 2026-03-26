@@ -26,27 +26,23 @@ internal sealed class AlienFxV4Device : IDisposable
 
     public string DevicePath { get; }
 
-    public static AlienFxV4Device? Open(ushort vendorId, ushort productId, out string? error)
+    public static AlienFxV4Device? Open(HidDeviceInfo device, out string? error)
     {
-        foreach (HidDeviceInfo device in HidNative.EnumerateDevices())
+        if (device.OutputReportLength != 34)
         {
-            if (device.VendorId != vendorId || device.ProductId != productId || device.OutputReportLength != 34)
-            {
-                continue;
-            }
-
-            SafeFileHandle handle = HidNative.OpenHandle(device.DevicePath);
-            if (handle.IsInvalid)
-            {
-                continue;
-            }
-
-            error = null;
-            return new AlienFxV4Device(handle, device.DevicePath, device.OutputReportLength);
+            error = $"Lighting device {device.DevicePath} does not expose a supported AlienFX API v4 report size.";
+            return null;
         }
 
-        error = $"Lighting device VID_{vendorId:X4}/PID_{productId:X4} not found.";
-        return null;
+        SafeFileHandle handle = HidNative.OpenHandle(device.DevicePath);
+        if (handle.IsInvalid)
+        {
+            error = $"Lighting device {device.DevicePath} could not be opened.";
+            return null;
+        }
+
+        error = null;
+        return new AlienFxV4Device(handle, device.DevicePath, device.OutputReportLength);
     }
 
     public bool ApplyLight(ZoneLightingState state, byte lightId, out string? error)

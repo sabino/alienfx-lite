@@ -2,19 +2,41 @@ using System.Text.Json;
 
 namespace AlienFxLite.Contracts;
 
-public enum LightingZone
-{
-    KbLeft = 0,
-    KbCenter = 1,
-    KbRight = 2,
-    KbNumPad = 3,
-}
-
 public enum LightingEffect
 {
     Static = 0,
     Pulse = 1,
     Morph = 2,
+    Breathing = 3,
+    Spectrum = 4,
+    Rainbow = 5,
+}
+
+public static class LightingEffectCatalog
+{
+    public static IReadOnlyList<LightingEffect> DefaultSupportedEffects { get; } =
+        [LightingEffect.Static, LightingEffect.Pulse, LightingEffect.Morph];
+
+    public static bool IsAnimated(LightingEffect effect) => effect != LightingEffect.Static;
+
+    public static IReadOnlyList<LightingEffect> GetSupportedEffects(LightingDeviceProfile? profile) =>
+        profile?.SupportedEffects is { Count: > 0 } effects
+            ? effects
+            : DefaultSupportedEffects;
+
+    public static LightingEffect GetDefaultEffect(LightingDeviceProfile? profile) =>
+        GetSupportedEffects(profile).FirstOrDefault();
+
+    public static bool SupportsEffect(LightingDeviceProfile? profile, LightingEffect effect) =>
+        GetSupportedEffects(profile).Contains(effect);
+
+    public static LightingEffect NormalizeEffect(LightingDeviceProfile? profile, LightingEffect effect) =>
+        SupportsEffect(profile, effect)
+            ? effect
+            : GetDefaultEffect(profile);
+
+    public static bool RequiresWholeDeviceSelection(LightingDeviceProfile? profile, LightingEffect effect) =>
+        profile?.ApiVersion == 5 && IsAnimated(effect);
 }
 
 public enum FanControlMode
@@ -43,8 +65,38 @@ public static class ServiceResponseCodes
 
 public readonly record struct RgbColor(byte R, byte G, byte B);
 
+public sealed record LightingZoneDefinition(
+    int ZoneId,
+    string Name,
+    bool IsPowerOrIndicator,
+    IReadOnlyList<byte> LightIds);
+
+public sealed record LightingGridDefinition(
+    int GridId,
+    string Name,
+    int Columns,
+    int Rows,
+    IReadOnlyList<int?> Cells);
+
+public sealed record LightingDeviceProfile(
+    string DeviceKey,
+    string DisplayName,
+    ushort VendorId,
+    ushort ProductId,
+    int ApiVersion,
+    string SurfaceName,
+    string Protocol,
+    IReadOnlyList<LightingZoneDefinition> Zones,
+    LightingGridDefinition? PreviewGrid,
+    bool SupportsBrightness = true,
+    bool SupportsPersistence = false,
+    bool SupportsGlobalEffects = false,
+    IReadOnlyList<LightingEffect>? SupportedEffects = null,
+    string? HardwareId = null,
+    string? HardwareDescription = null);
+
 public sealed record ZoneLightingState(
-    LightingZone Zone,
+    int ZoneId,
     LightingEffect Effect,
     RgbColor PrimaryColor,
     RgbColor? SecondaryColor,
@@ -55,10 +107,12 @@ public sealed record LightingSnapshot(
     bool Enabled,
     int Brightness,
     bool KeepAlive,
+    string? DeviceKey,
     IReadOnlyList<ZoneLightingState> ZoneStates);
 
 public sealed record SetLightingStateRequest(
-    IReadOnlyList<LightingZone> Zones,
+    string? DeviceKey,
+    IReadOnlyList<int> ZoneIds,
     LightingEffect Effect,
     RgbColor PrimaryColor,
     RgbColor? SecondaryColor,
@@ -84,12 +138,15 @@ public sealed record DeviceStatus(
     bool FanAvailable,
     string? LightingDevice,
     string? LightingProtocol,
-    string? FanProvider);
+    string? FanProvider,
+    LightingDeviceProfile? LightingProfile,
+    IReadOnlyList<LightingDeviceProfile> LightingProfiles);
 
 public sealed record StatusSnapshot(
     LightingSnapshot Lighting,
     FanStatus Fan,
-    DeviceStatus Devices);
+    DeviceStatus Devices,
+    IReadOnlyList<LightingSnapshot> LightingStates);
 
 public sealed record PingResponse(
     string ServiceVersion,
