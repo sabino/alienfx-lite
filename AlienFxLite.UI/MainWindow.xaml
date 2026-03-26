@@ -819,12 +819,12 @@
                                                 Content="Open release"
                                                 Visibility="Collapsed"/>
                                         <Button x:Name="DownloadInstallerButton"
-                                                Width="138"
+                                                Width="126"
                                                 Height="38"
                                                 Margin="8,0,0,0"
                                                 Style="{StaticResource AccentGlassButtonStyle}"
                                                 Click="DownloadInstallerButton_Click"
-                                                Content="Download installer"
+                                                Content="Install update"
                                                 Visibility="Collapsed"/>
                                     </StackPanel>
 
