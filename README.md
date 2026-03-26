@@ -56,9 +56,9 @@ That script:
 
 That creates:
 
-- `artifacts\release\AlienFxLite-Setup-win-x64-v0.2.1.exe`
-- `artifacts\release\AlienFxLite-portable-win-x64-v0.2.1.zip`
-- `artifacts\release\AlienFxLite.Tool-win-x64-v0.2.1.zip`
+- `artifacts\release\AlienFxLite-Setup-win-x64-v0.2.2.exe`
+- `artifacts\release\AlienFxLite-portable-win-x64-v0.2.2.zip`
+- `artifacts\release\AlienFxLite.Tool-win-x64-v0.2.2.zip`
 - `artifacts\release\SHA256SUMS.txt`
 - `artifacts\app\AlienFxLite.exe`
 - `artifacts\tool\AlienFxLite.Tool.exe`
@@ -83,8 +83,17 @@ The desktop app includes:
 - capability-driven effect lists per mapped surface
 - minimize/close to tray
 - per-user `Start with Windows`
-- manual `Check for updates` against GitHub Releases
+- manual `Check for updates` against GitHub Releases, with in-app installer download and handoff
 - automatic broker reconnect
+
+## Releases And Updates
+
+GitHub Releases remain the update source for the app. The current flow is:
+
+- clicking `Check for updates` queries the latest GitHub Release on demand
+- if a newer build exists, `Install update` downloads the matching installer and launches it
+- the installer upgrades the existing app in place by reusing the same Inno Setup `AppId`
+- a scheduled GitHub Actions workflow can cut a new weekly release, but only when `main` has commits after the latest tagged release
 
 ## Service Management
 

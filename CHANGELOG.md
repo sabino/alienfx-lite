@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 - 2026-03-26
+
+- Added in-app installer handoff, so `Check for updates` can download the latest setup and launch the upgrade flow instead of only opening GitHub.
+- Added a weekly GitHub Actions release workflow that only tags and publishes a new build when `main` has changed since the latest release tag.
+- Explicitly ignore local `artifacts/camera-probe` helper captures so BRIO debugging files stay out of git history.
+
 ## 0.2.1 - 2026-03-26
 
 - Added per-zone effect selectors and live per-zone color state in the desktop deck, with clearer pending-save feedback and undo-to-saved behavior.

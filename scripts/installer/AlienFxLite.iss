@@ -33,6 +33,8 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
+CloseApplications=yes
+RestartApplications=no
 UninstallDisplayIcon={app}\{#AppExeName}
 SetupIconFile={#RepoRoot}\AlienFxLite.UI\Assets\Icons\app.ico
 

@@ -1,0 +1,97 @@
+name: weekly-release
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-release
+  cancel-in-progress: false
+
+jobs:
+  weekly-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine release version
+        id: version
+        shell: pwsh
+        run: |
+          git fetch --tags --force
+          $latestTag = git tag --list 'v*' --sort=-version:refname | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($latestTag)) {
+            $aheadCount = [int](git rev-list HEAD --count)
+            $baseVersion = [Version]'0.0.0'
+          }
+          else {
+            $aheadCount = [int](git rev-list "$latestTag..HEAD" --count)
+            $baseVersion = [Version]($latestTag.TrimStart('v', 'V'))
+          }
+
+          if ($aheadCount -le 0) {
+            "should_release=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          $nextPatch = if ($baseVersion.Build -ge 0) { $baseVersion.Build + 1 } else { 0 }
+          $nextVersion = '{0}.{1}.{2}' -f $baseVersion.Major, $baseVersion.Minor, $nextPatch
+
+          "should_release=true" >> $env:GITHUB_OUTPUT
+          "latest_tag=$latestTag" >> $env:GITHUB_OUTPUT
+          "next_version=$nextVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Setup .NET
+        if: steps.version.outputs.should_release == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Python
+        if: steps.version.outputs.should_release == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install icon tooling
+        if: steps.version.outputs.should_release == 'true'
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Install Inno Setup
+        if: steps.version.outputs.should_release == 'true'
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Bump version metadata
+        if: steps.version.outputs.should_release == 'true'
+        shell: pwsh
+        run: .\scripts\bump-version.ps1 -Version ${{ steps.version.outputs.next_version }} -PreviousTag "${{ steps.version.outputs.latest_tag }}"
+
+      - name: Validate release payload
+        if: steps.version.outputs.should_release == 'true'
+        shell: pwsh
+        run: |
+          dotnet build .\AlienFxLite.sln --configuration Release
+          .\scripts\build-release.ps1 -Version ${{ steps.version.outputs.next_version }}
+
+      - name: Commit version bump and tag release
+        if: steps.version.outputs.should_release == 'true'
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.next_version }}'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Directory.Build.props CHANGELOG.md
+          git commit -m "chore: release v$version"
+          git tag "v$version"
+          git push origin HEAD:main
+          git push origin "v$version"

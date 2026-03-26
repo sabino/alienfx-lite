@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -31,6 +32,7 @@ public partial class MainWindow : Window
     private readonly DesktopSettingsStore _desktopSettingsStore = new();
     private readonly LocalLightingStateStore _lightingStateStore = new();
     private readonly GitHubReleaseUpdateService _updateService = new();
+    private readonly InstallerUpdateService _installerUpdateService = new();
     private readonly AlienFxLightingController _lightingController = new();
     private readonly AppLaunchOptions _launchOptions;
     private readonly WinForms.ColorDialog _colorDialog = new() { FullOpen = true };
@@ -57,6 +59,7 @@ public partial class MainWindow : Window
     private bool _lightingDirty;
     private bool _allowExit;
     private bool _checkingForUpdates;
+    private bool _installingUpdate;
     private bool _startHiddenPending;
     private bool _trayTipShown;
     private string? _desktopSettingsError;
@@ -355,10 +358,58 @@ public partial class MainWindow : Window
 
     private void DownloadInstallerButton_Click(object sender, RoutedEventArgs e)
     {
-        string? installerUrl = _lastUpdateResult?.Release?.InstallerUrl;
-        if (!string.IsNullOrWhiteSpace(installerUrl))
+        _ = InstallUpdateAsync();
+    }
+
+    private async Task InstallUpdateAsync()
+    {
+        if (_installingUpdate)
         {
-            OpenExternalTarget(installerUrl);
+            return;
+        }
+
+        GitHubReleaseUpdateService.GitHubReleaseInfo? release = _lastUpdateResult?.Release;
+        if (release is null || string.IsNullOrWhiteSpace(release.InstallerUrl))
+        {
+            return;
+        }
+
+        MessageBoxResult confirmation = WpfMessageBox.Show(
+            this,
+            $"AlienFx Lite will download the {release.TagName} installer, launch setup, and close so the upgrade can continue.\n\nContinue?",
+            "AlienFx Lite",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        _installingUpdate = true;
+        _updateError = null;
+        UpdateUpdateUi();
+
+        try
+        {
+            await _installerUpdateService.DownloadAndLaunchAsync(release).ConfigureAwait(true);
+            _allowExit = true;
+            Close();
+        }
+        catch (HttpRequestException ex)
+        {
+            _updateError = $"Installer download failed: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _updateError = ex.Message;
+        }
+        finally
+        {
+            _installingUpdate = false;
+            if (IsLoaded)
+            {
+                UpdateUpdateUi();
+            }
         }
     }
 
@@ -1446,7 +1497,9 @@ public partial class MainWindow : Window
     {
         CurrentVersionText.Text = $"AlienFx Lite {AppVersionInfo.CurrentVersion}";
         CheckUpdatesButton.Content = _checkingForUpdates ? "Checking..." : "Check for updates";
-        CheckUpdatesButton.IsEnabled = !_checkingForUpdates;
+        CheckUpdatesButton.IsEnabled = !_checkingForUpdates && !_installingUpdate;
+        OpenReleaseButton.IsEnabled = !_installingUpdate;
+        DownloadInstallerButton.IsEnabled = !_installingUpdate;
 
         if (_checkingForUpdates)
         {
@@ -1457,6 +1510,19 @@ public partial class MainWindow : Window
             ReleaseNotesText.Visibility = Visibility.Collapsed;
             return;
         }
+
+        if (_installingUpdate)
+        {
+            UpdateStatusText.Text = "Downloading the installer and starting setup...";
+            UpdateWarningText.Visibility = Visibility.Collapsed;
+            OpenReleaseButton.Visibility = Visibility.Collapsed;
+            DownloadInstallerButton.Visibility = Visibility.Visible;
+            DownloadInstallerButton.Content = "Installing...";
+            ReleaseNotesText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        DownloadInstallerButton.Content = "Install update";
 
         if (!string.IsNullOrWhiteSpace(_updateError))
         {
@@ -1571,6 +1637,11 @@ public partial class MainWindow : Window
         {
             e.Cancel = true;
             HideToTray(showNotification: false);
+            return;
+        }
+
+        if (_allowExit)
+        {
             return;
         }
 
