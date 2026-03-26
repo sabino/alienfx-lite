@@ -77,6 +77,7 @@ public partial class MainWindow : Window
     private string? _localLightingError;
     private string? _updateError;
     private GitHubReleaseUpdateService.UpdateCheckResult? _lastUpdateResult;
+    private double _contentZoomScale = 1d;
 
     public MainWindow()
         : this(new AppLaunchOptions(AppCommand.Ui, false, null, null))
@@ -162,9 +163,51 @@ public partial class MainWindow : Window
         BackdropHelper.TryApply(this);
     }
 
+    private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == 0)
+        {
+            return;
+        }
+
+        bool handled = e.Key switch
+        {
+            Key.Add or Key.OemPlus => TryAdjustZoom(0.1),
+            Key.Subtract or Key.OemMinus => TryAdjustZoom(-0.1),
+            Key.D0 or Key.NumPad0 => TrySetZoom(1d),
+            _ => false,
+        };
+
+        if (handled)
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void ZoneEditorHost_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateZoneEditorColumns();
+    }
+
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
         await RefreshStatusAsync(silent: false, preservePendingLighting: false).ConfigureAwait(true);
+    }
+
+    private bool TryAdjustZoom(double delta) => TrySetZoom(_contentZoomScale + delta);
+
+    private bool TrySetZoom(double requestedScale)
+    {
+        double clamped = Math.Clamp(Math.Round(requestedScale, 2), 0.8d, 1.6d);
+        if (Math.Abs(clamped - _contentZoomScale) < 0.01d)
+        {
+            return false;
+        }
+
+        _contentZoomScale = clamped;
+        MainContentScaleTransform.ScaleX = clamped;
+        MainContentScaleTransform.ScaleY = clamped;
+        return true;
     }
 
     private async void ApplyLightingButton_Click(object sender, RoutedEventArgs e)
@@ -1068,13 +1111,6 @@ public partial class MainWindow : Window
             _activeZoneId = _lightingProfile.Zones.FirstOrDefault()?.ZoneId;
         }
 
-        ZoneEditorPanel.Columns = profile?.Zones.Count switch
-        {
-            > 1 => 2,
-            > 0 => 1,
-            _ => 1,
-        };
-
         foreach (LightingZoneDefinition zone in profile?.Zones ?? [])
         {
             Border card = new()
@@ -1292,6 +1328,8 @@ public partial class MainWindow : Window
             _zonePaletteWraps[zone.ZoneId] = paletteWrap;
         }
 
+        UpdateZoneEditorColumns();
+
         BuildKeyboardDeck(profile);
         UpdateFocusedZoneControls();
         UpdateZoneEditorButtons();
@@ -1368,6 +1406,27 @@ public partial class MainWindow : Window
             SetActiveZone(zoneId);
             e.Handled = true;
         }
+    }
+
+    private void UpdateZoneEditorColumns()
+    {
+        int zoneCount = _lightingProfile?.Zones.Count ?? 0;
+        if (zoneCount <= 0)
+        {
+            ZoneEditorPanel.Columns = 1;
+            return;
+        }
+
+        double availableWidth = ZoneEditorHost.ActualWidth;
+        if (availableWidth <= 0)
+        {
+            ZoneEditorPanel.Columns = Math.Min(zoneCount, 4);
+            return;
+        }
+
+        const double targetCardWidth = 180d;
+        int computedColumns = Math.Max(1, (int)Math.Floor((availableWidth + 10d) / targetCardWidth));
+        ZoneEditorPanel.Columns = Math.Clamp(computedColumns, 1, Math.Min(zoneCount, 4));
     }
 
     private async void ZoneColorButton_Click(object sender, RoutedEventArgs e)

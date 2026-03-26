@@ -13,6 +13,7 @@
         MinHeight="720"
         Loaded="Window_Loaded"
         SourceInitialized="Window_SourceInitialized"
+        PreviewKeyDown="Window_PreviewKeyDown"
         Background="#080C13"
         TextElement.FontFamily="Segoe UI Variable Text">
     <Window.Resources>
@@ -380,10 +381,15 @@
                                     CornerRadius="3"
                                     Background="#27384B61"/>
                             <Track x:Name="PART_Track"
+                                   Minimum="{TemplateBinding Minimum}"
+                                   Maximum="{TemplateBinding Maximum}"
+                                   Value="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Value, Mode=TwoWay}"
+                                   Orientation="{TemplateBinding Orientation}"
+                                   IsDirectionReversed="{TemplateBinding IsDirectionReversed}"
                                    VerticalAlignment="Center">
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Focusable="False"
-                                                  IsEnabled="False">
+                                                  Command="Slider.DecreaseLarge">
                                         <RepeatButton.Template>
                                             <ControlTemplate TargetType="RepeatButton">
                                                 <Border Height="6"
@@ -415,7 +421,7 @@
                                 </Track.Thumb>
                                 <Track.IncreaseRepeatButton>
                                     <RepeatButton Focusable="False"
-                                                  IsEnabled="False">
+                                                  Command="Slider.IncreaseLarge">
                                         <RepeatButton.Template>
                                             <ControlTemplate TargetType="RepeatButton">
                                                 <Border Height="6"
@@ -510,13 +516,22 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="1.12*"/>
-                    <ColumnDefinition Width="0.88*"/>
-                </Grid.ColumnDefinitions>
+            <ScrollViewer Grid.Row="1"
+                          x:Name="MainContentScrollViewer"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          CanContentScroll="False">
+                <Grid x:Name="MainContentGrid"
+                      MinWidth="1180">
+                    <Grid.LayoutTransform>
+                        <ScaleTransform x:Name="MainContentScaleTransform" ScaleX="1" ScaleY="1"/>
+                    </Grid.LayoutTransform>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.12*"/>
+                        <ColumnDefinition Width="0.88*"/>
+                    </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,14,0">
+                    <Border Grid.Column="0" Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,14,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -578,19 +593,22 @@
                             </Grid>
                         </Border>
 
-                        <primitives:UniformGrid x:Name="ZoneEditorPanel"
-                                                Grid.Row="2"
-                                                Columns="4"
-                                                Margin="0,0,0,6"/>
+                        <Grid x:Name="ZoneEditorHost"
+                              Grid.Row="2"
+                              Margin="0,0,0,6"
+                              SizeChanged="ZoneEditorHost_SizeChanged">
+                            <primitives:UniformGrid x:Name="ZoneEditorPanel"
+                                                    Columns="4"/>
+                        </Grid>
 
                         <TextBlock x:Name="LightingHintText"
                                    Grid.Row="3"
                                    Foreground="{StaticResource MutedBrush}"
                                    TextWrapping="Wrap"/>
                     </Grid>
-                </Border>
+                    </Border>
 
-                <Grid Grid.Column="1">
+                    <Grid Grid.Column="1">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
@@ -913,6 +931,7 @@
                     </Border>
                     </Grid>
                 </Grid>
+            </ScrollViewer>
 
             <Button x:Name="ApplyLightingButton"
                     Grid.Row="2"
