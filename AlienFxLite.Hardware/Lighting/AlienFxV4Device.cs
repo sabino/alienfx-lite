@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using AlienFxLite.Contracts;
 using AlienFxLite.Hardware.Hid;
 using Microsoft.Win32.SafeHandles;
@@ -41,6 +42,8 @@ internal sealed class AlienFxV4Device : IDisposable
             return null;
         }
 
+        HidNative.ConfigureStreamingTimeouts(handle);
+
         error = null;
         return new AlienFxV4Device(handle, device.DevicePath, device.OutputReportLength);
     }
@@ -60,26 +63,36 @@ internal sealed class AlienFxV4Device : IDisposable
         }
 
         List<LightPhase> phases = BuildPhases(state);
-        List<CommandMod> mods = [];
-        for (int phaseIndex = 0; phaseIndex < phases.Count; phaseIndex++)
+        const int phasesPerReport = 3;
+        for (int chunkStart = 0; chunkStart < phases.Count; chunkStart += phasesPerReport)
         {
-            int offset = 3 + (phaseIndex * 8);
-            LightPhase phase = phases[phaseIndex];
-            mods.Add(new CommandMod(
-                offset,
-                [
-                    phase.Type,
-                    phase.Time,
-                    V4OpCodes[phase.Type],
-                    0,
-                    phase.Tempo,
-                    phase.Color.R,
-                    phase.Color.G,
-                    phase.Color.B,
-                ]));
+            List<CommandMod> mods = [];
+            int chunkLength = Math.Min(phasesPerReport, phases.Count - chunkStart);
+            for (int localIndex = 0; localIndex < chunkLength; localIndex++)
+            {
+                int offset = 3 + (localIndex * 8);
+                LightPhase phase = phases[chunkStart + localIndex];
+                mods.Add(new CommandMod(
+                    offset,
+                    [
+                        phase.PacketType,
+                        phase.Time,
+                        V4OpCodes[phase.ActionType],
+                        0,
+                        phase.Tempo,
+                        phase.Color.R,
+                        phase.Color.G,
+                        phase.Color.B,
+                    ]));
+            }
+
+            if (!PrepareAndSend(CommandColorSet, mods, out error))
+            {
+                return false;
+            }
         }
 
-        return PrepareAndSend(CommandColorSet, mods, out error);
+        return true;
     }
 
     public bool ApplyStaticZones(RgbColor color, IReadOnlyList<byte> zoneIds, out string? error)
@@ -107,11 +120,7 @@ internal sealed class AlienFxV4Device : IDisposable
     public bool Reset(out string? error)
     {
         error = null;
-        if (!WaitForReady())
-        {
-            error = "Lighting controller did not report ready state.";
-            return false;
-        }
+        WaitForReady();
 
         if (!PrepareAndSend(CommandControl, [new CommandMod(4, [4])], out error))
         {
@@ -197,16 +206,40 @@ internal sealed class AlienFxV4Device : IDisposable
         {
             LightingEffect.Pulse =>
             [
-                new LightPhase((byte)LightingEffect.Pulse, time, tempo, state.PrimaryColor),
-                new LightPhase((byte)LightingEffect.Pulse, time, tempo, new RgbColor(0, 0, 0)),
+                new LightPhase((byte)LightingEffect.Pulse, (byte)LightingEffect.Pulse, time, tempo, state.PrimaryColor),
+                new LightPhase((byte)LightingEffect.Pulse, (byte)LightingEffect.Pulse, time, tempo, new RgbColor(0, 0, 0)),
             ],
             LightingEffect.Morph =>
             [
-                new LightPhase((byte)LightingEffect.Morph, time, tempo, state.PrimaryColor),
-                new LightPhase((byte)LightingEffect.Morph, time, tempo, state.SecondaryColor ?? new RgbColor(0, 0, 0)),
+                new LightPhase((byte)LightingEffect.Morph, (byte)LightingEffect.Morph, time, tempo, state.PrimaryColor),
+                new LightPhase((byte)LightingEffect.Morph, (byte)LightingEffect.Morph, time, tempo, state.SecondaryColor ?? new RgbColor(0, 0, 0)),
             ],
-            _ => [new LightPhase((byte)LightingEffect.Static, time, 0xfa, state.PrimaryColor)],
+            LightingEffect.Breathing =>
+            [
+                new LightPhase((byte)LightingEffect.Breathing, (byte)LightingEffect.Morph, time, tempo, state.PrimaryColor),
+            ],
+            LightingEffect.Spectrum => BuildPalettePhases((byte)LightingEffect.Spectrum, time, tempo),
+            LightingEffect.Rainbow => BuildPalettePhases((byte)LightingEffect.Rainbow, time, tempo),
+            _ => [new LightPhase((byte)LightingEffect.Static, (byte)LightingEffect.Static, time, 0xfa, state.PrimaryColor)],
         };
+    }
+
+    private static List<LightPhase> BuildPalettePhases(byte actionType, byte time, byte tempo)
+    {
+        RgbColor[] colors =
+        [
+            new(255, 72, 72),
+            new(255, 154, 56),
+            new(255, 214, 72),
+            new(110, 255, 97),
+            new(90, 228, 255),
+            new(88, 132, 255),
+            new(184, 110, 255),
+        ];
+
+        return colors
+            .Select(color => new LightPhase(actionType, (byte)LightingEffect.Morph, time, tempo, color))
+            .ToList();
     }
 
     private static byte MapTempo(int speed)
@@ -219,7 +252,7 @@ internal sealed class AlienFxV4Device : IDisposable
     {
         byte[] buffer = new byte[_reportLength];
         buffer[0] = 0;
-        if (!HidNative.HidD_GetInputReport(_handle, buffer, buffer.Length))
+        if (!HidNative.TryGetInputReport(_handle, buffer))
         {
             return 0;
         }
@@ -239,9 +272,9 @@ internal sealed class AlienFxV4Device : IDisposable
             Array.Copy(mod.Value, 0, buffer, mod.Offset, mod.Value.Length);
         }
 
-        if (!HidNative.HidD_SetOutputReport(_handle, buffer, buffer.Length))
+        if (!HidNative.TrySendOutputReport(_handle, buffer, out int win32Error))
         {
-            error = $"Failed to send lighting report to {DevicePath}.";
+            error = $"Failed to send lighting report to {DevicePath} (Win32 {win32Error}).";
             return false;
         }
 
@@ -250,5 +283,5 @@ internal sealed class AlienFxV4Device : IDisposable
 
     private sealed record CommandMod(int Offset, byte[] Value);
 
-    private sealed record LightPhase(byte Type, byte Time, byte Tempo, RgbColor Color);
+    private sealed record LightPhase(byte ActionType, byte PacketType, byte Time, byte Tempo, RgbColor Color);
 }

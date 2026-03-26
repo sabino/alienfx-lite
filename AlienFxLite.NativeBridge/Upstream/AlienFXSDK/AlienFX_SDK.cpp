@@ -96,8 +96,12 @@ namespace AlienFX_SDK {
 
 			switch (version) {
 			case API_V2: case API_V3: case API_V4: //case API_V9:
-				//res = DeviceIoControl(devHandle, IOCTL_HID_SET_OUTPUT_REPORT, buffer, length, 0, 0, &written, NULL);
-				return HidD_SetOutputReport(devHandle, buffer, length);
+			{
+				BOOL sent = HidD_SetOutputReport(devHandle, buffer, length);
+				if (!sent)
+					sent = DeviceIoControl(devHandle, IOCTL_HID_SET_OUTPUT_REPORT, buffer, length, 0, 0, &written, NULL);
+				return sent;
+			}
 				//break;
 			case API_V5:
 				//res =  DeviceIoControl(devHandle, IOCTL_HID_SET_FEATURE, buffer, length, 0, 0, &written, NULL);
@@ -223,6 +227,9 @@ namespace AlienFX_SDK {
 				devHandle = NULL;
 			}
 			else {
+				devicePath.clear();
+				for (size_t pathIndex = 0; deviceInterfaceDetailData->DevicePath[pathIndex] != '\0'; pathIndex++)
+					devicePath += static_cast<wchar_t>(deviceInterfaceDetailData->DevicePath[pathIndex]);
 				wchar_t descbuf[256];
 				description.clear();
 				if (HidD_GetManufacturerString(devHandle, descbuf, 255))

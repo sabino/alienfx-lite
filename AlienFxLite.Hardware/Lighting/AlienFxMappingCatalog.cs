@@ -286,15 +286,11 @@ internal sealed class AlienFxMappingCatalog
             List<LightingZoneDefinition> zones = visibleZones
                 .Select(zone =>
                 {
-                    byte[] lightIds = zone.Cells.Count > 0
-                        ? zone.Cells.Select(static cell => (byte)Math.Clamp(cell.CellIndex, 0, 255)).Distinct().ToArray()
-                        : [(byte)Math.Clamp(zone.ZoneId, 0, 255)];
-
                     return new LightingZoneDefinition(
                         zone.ZoneId,
                         zone.Name,
                         zone.Flags != 0,
-                        lightIds);
+                        [(byte)Math.Clamp(zone.ZoneId, 0, 255)]);
                 })
                 .OrderBy(static zone => zone.ZoneId)
                 .ToList();

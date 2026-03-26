@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AlienFxLite.Contracts\AlienFxLite.Contracts.csproj" />
     <ProjectReference Include="..\AlienFxLite.Broker\AlienFxLite.Broker.csproj" />
+    <ProjectReference Include="..\AlienFxLite.Hardware\AlienFxLite.Hardware.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

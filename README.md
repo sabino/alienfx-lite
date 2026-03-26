@@ -56,9 +56,9 @@ That script:
 
 That creates:
 
-- `artifacts\release\AlienFxLite-Setup-win-x64-v0.2.0.exe`
-- `artifacts\release\AlienFxLite-portable-win-x64-v0.2.0.zip`
-- `artifacts\release\AlienFxLite.Tool-win-x64-v0.2.0.zip`
+- `artifacts\release\AlienFxLite-Setup-win-x64-v0.2.1.exe`
+- `artifacts\release\AlienFxLite-portable-win-x64-v0.2.1.zip`
+- `artifacts\release\AlienFxLite.Tool-win-x64-v0.2.1.zip`
 - `artifacts\release\SHA256SUMS.txt`
 - `artifacts\app\AlienFxLite.exe`
 - `artifacts\tool\AlienFxLite.Tool.exe`
@@ -143,8 +143,8 @@ Or from the unified desktop binary:
 Create a release tag:
 
 ```powershell
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 ## CLI Examples

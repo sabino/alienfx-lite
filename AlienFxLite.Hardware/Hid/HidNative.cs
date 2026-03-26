@@ -5,6 +5,8 @@ namespace AlienFxLite.Hardware.Hid;
 
 internal static class HidNative
 {
+    private const uint IoctlHidSetOutputReport = 0x000B0195;
+    private const uint IoctlHidGetInputReport = 0x000B01A2;
     private const uint DigcfPresent = 0x00000002;
     private const uint DigcfDeviceInterface = 0x00000010;
     private const uint GenericRead = 0x80000000;
@@ -12,6 +14,7 @@ internal static class HidNative
     private const uint FileShareRead = 0x00000001;
     private const uint FileShareWrite = 0x00000002;
     private const uint OpenExisting = 3;
+    private const uint FileFlagSequentialScan = 0x08000000;
 
     public static IReadOnlyList<HidDeviceInfo> EnumerateDevices()
     {
@@ -64,7 +67,7 @@ internal static class HidNative
                         FileShareRead | FileShareWrite,
                         IntPtr.Zero,
                         OpenExisting,
-                        0,
+                        FileFlagSequentialScan,
                         IntPtr.Zero);
 
                     if (handle.IsInvalid)
@@ -110,7 +113,33 @@ internal static class HidNative
     }
 
     public static SafeFileHandle OpenHandle(string devicePath) =>
-        CreateFile(devicePath, GenericRead | GenericWrite, FileShareRead | FileShareWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
+        CreateFile(
+            devicePath,
+            GenericRead | GenericWrite,
+            FileShareRead | FileShareWrite,
+            IntPtr.Zero,
+            OpenExisting,
+            FileFlagSequentialScan,
+            IntPtr.Zero);
+
+    public static void ConfigureStreamingTimeouts(SafeFileHandle handle)
+    {
+        if (handle.IsInvalid)
+        {
+            return;
+        }
+
+        COMMTIMEOUTS timeouts = new()
+        {
+            ReadIntervalTimeout = 100,
+            ReadTotalTimeoutMultiplier = 0,
+            ReadTotalTimeoutConstant = 0,
+            WriteTotalTimeoutMultiplier = 10,
+            WriteTotalTimeoutConstant = 200,
+        };
+
+        SetCommTimeouts(handle, ref timeouts);
+    }
 
     [DllImport("hid.dll")]
     private static extern void HidD_GetHidGuid(out Guid hidGuid);
@@ -155,6 +184,49 @@ internal static class HidNative
         uint flagsAndAttributes,
         IntPtr templateFile);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetCommTimeouts(SafeFileHandle hFile, ref COMMTIMEOUTS lpCommTimeouts);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool DeviceIoControl(
+        SafeFileHandle hDevice,
+        uint dwIoControlCode,
+        byte[] lpInBuffer,
+        int nInBufferSize,
+        byte[]? lpOutBuffer,
+        int nOutBufferSize,
+        out uint lpBytesReturned,
+        IntPtr lpOverlapped);
+
+    public static bool TrySendOutputReport(SafeFileHandle handle, byte[] buffer, out int win32Error)
+    {
+        if (HidD_SetOutputReport(handle, buffer, buffer.Length))
+        {
+            win32Error = 0;
+            return true;
+        }
+
+        win32Error = Marshal.GetLastWin32Error();
+        if (DeviceIoControl(handle, IoctlHidSetOutputReport, buffer, buffer.Length, null, 0, out _, IntPtr.Zero))
+        {
+            win32Error = 0;
+            return true;
+        }
+
+        win32Error = Marshal.GetLastWin32Error();
+        return false;
+    }
+
+    public static bool TryGetInputReport(SafeFileHandle handle, byte[] buffer)
+    {
+        if (HidD_GetInputReport(handle, buffer, buffer.Length))
+        {
+            return true;
+        }
+
+        return DeviceIoControl(handle, IoctlHidGetInputReport, Array.Empty<byte>(), 0, buffer, buffer.Length, out _, IntPtr.Zero);
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct SP_DEVICE_INTERFACE_DATA
     {
@@ -195,6 +267,16 @@ internal static class HidNative
         public short NumberFeatureButtonCaps;
         public short NumberFeatureValueCaps;
         public short NumberFeatureDataIndices;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct COMMTIMEOUTS
+    {
+        public uint ReadIntervalTimeout;
+        public uint ReadTotalTimeoutMultiplier;
+        public uint ReadTotalTimeoutConstant;
+        public uint WriteTotalTimeoutMultiplier;
+        public uint WriteTotalTimeoutConstant;
     }
 }
 

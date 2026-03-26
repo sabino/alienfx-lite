@@ -165,6 +165,15 @@
             </Setter>
         </Style>
 
+        <Style x:Key="ZoneEditorCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="#51223245"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushGlass}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="18"/>
+            <Setter Property="Padding" Value="12"/>
+            <Setter Property="Margin" Value="0,0,10,10"/>
+        </Style>
+
         <Style x:Key="GlassComboBoxItemStyle" TargetType="ComboBoxItem">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
             <Setter Property="Background" Value="Transparent"/>
@@ -183,11 +192,12 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#7A20384F"/>
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#D81B3244"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#A11E5C75"/>
-                                <Setter Property="Foreground" Value="{StaticResource AccentStrongBrush}"/>
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#F0204158"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -197,7 +207,7 @@
 
         <Style x:Key="GlassComboBoxStyle" TargetType="ComboBox">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-            <Setter Property="Background" Value="#6D19263A"/>
+            <Setter Property="Background" Value="#86141F2D"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrushGlass}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="14,10"/>
@@ -260,12 +270,13 @@
                                     <Border Margin="0,8,0,0"
                                             Padding="8"
                                             CornerRadius="20"
-                                            Background="#EA0C131D"
+                                            Background="#F2141B26"
                                             BorderBrush="{StaticResource InnerBorderBrush}"
                                             BorderThickness="1">
                                         <ScrollViewer Margin="0"
                                                       SnapsToDevicePixels="True"
-                                                      CanContentScroll="True">
+                                                      CanContentScroll="True"
+                                                      VerticalScrollBarVisibility="Auto">
                                             <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                         </ScrollViewer>
                                     </Border>
@@ -275,14 +286,14 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="ComboChrome" Property="BorderBrush" Value="#66AFD8"/>
-                                <Setter TargetName="ComboChrome" Property="Background" Value="#7C1C3149"/>
+                                <Setter TargetName="ComboChrome" Property="Background" Value="#9718293B"/>
                             </Trigger>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
                                 <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsDropDownOpen" Value="True">
                                 <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                                <Setter TargetName="ComboChrome" Property="Background" Value="#7E203549"/>
+                                <Setter TargetName="ComboChrome" Property="Background" Value="#A01C3146"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="ComboChrome" Property="Opacity" Value="0.55"/>
@@ -291,6 +302,12 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <Style x:Key="CompactGlassComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource GlassComboBoxStyle}">
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="MaxDropDownHeight" Value="220"/>
         </Style>
 
         <Style x:Key="PrimaryActionButtonStyle" TargetType="Button" BasedOn="{StaticResource GlassButtonStyle}">
@@ -473,10 +490,9 @@
                                         Background="#3B5D789A"/>
 
                                 <Viewbox Grid.Row="1" Stretch="Uniform">
-                                    <Grid Width="820" Height="312">
+                                    <Grid Width="820" Height="220">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="218"/>
-                                            <RowDefinition Height="72"/>
                                         </Grid.RowDefinitions>
 
                                         <Border CornerRadius="30"
@@ -488,31 +504,21 @@
                                                                     Rows="6"
                                                                     Columns="20"/>
                                         </Border>
-
-                                        <Border Grid.Row="1"
-                                                Margin="118,12,118,0"
-                                                CornerRadius="24"
-                                                Background="#43101823"
-                                                BorderBrush="#37617EA3"
-                                                BorderThickness="1">
-                                            <Border Margin="186,10"
-                                                    CornerRadius="18"
-                                                    Background="#2B0B121B"
-                                                    BorderBrush="#4E7AB6D0"
-                                                    BorderThickness="1"/>
-                                        </Border>
                                     </Grid>
                                 </Viewbox>
 
                                 <TextBlock Grid.Row="2"
                                            Margin="0,12,0,0"
                                            Foreground="{StaticResource MutedBrush}"
-                                           Text="Selected zones are previewed live with your current deck colors before you commit."
+                                           Text="Each section card below owns its own live color. Click a deck region to focus it, then use Match All if you want one shared color."
                                            TextWrapping="Wrap"/>
                             </Grid>
                         </Border>
 
-                        <WrapPanel x:Name="ZoneChipPanel" Grid.Row="2" Margin="0,0,0,6"/>
+                        <primitives:UniformGrid x:Name="ZoneEditorPanel"
+                                                Grid.Row="2"
+                                                Columns="4"
+                                                Margin="0,0,0,6"/>
 
                         <TextBlock x:Name="LightingHintText"
                                    Grid.Row="3"
@@ -521,13 +527,20 @@
                     </Grid>
                 </Border>
 
-                <ScrollViewer Grid.Column="1"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel>
-                    <Border Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,0,14">
+                <Grid Grid.Column="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource GlassCardStyle}" Padding="16" Margin="0,0,7,7">
                         <Grid>
                             <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
@@ -540,8 +553,13 @@
                             <StackPanel Grid.Row="0">
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Lighting Deck"/>
                                 <TextBlock Style="{StaticResource SectionHintStyle}"
-                                           Margin="0,6,0,16"
-                                           Text="Choose the effect, tune the colors, then commit through the primary action. The broker keeps the saved hardware scene in sync."/>
+                                           Margin="0,6,0,6"
+                                           Text="Each section owns its own primary color and effect. Use focus for the secondary Morph color and deck-wide settings."/>
+                                <TextBlock x:Name="FocusedZoneText"
+                                           Foreground="{StaticResource AccentStrongBrush}"
+                                           FontFamily="Segoe UI Variable Display"
+                                           FontWeight="SemiBold"
+                                           FontSize="12"/>
                             </StackPanel>
 
                             <Grid Grid.Row="1" Margin="0,0,0,14">
@@ -568,7 +586,7 @@
                                 <TextBlock Style="{StaticResource FieldLabelStyle}"
                                            Width="86"
                                            VerticalAlignment="Center"
-                                           Text="EFFECT"/>
+                                           Text="FOCUS FX"/>
                                 <ComboBox x:Name="EffectCombo"
                                           Grid.Column="1"
                                           Height="44"
@@ -581,23 +599,30 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Margin="0,0,10,0">
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="PRIMARY"/>
-                                    <Button x:Name="PrimaryColorButton"
-                                            Height="48"
-                                            Style="{StaticResource GlassButtonStyle}"
-                                            Click="PrimaryColorButton_Click"/>
-                                </StackPanel>
-                                <StackPanel x:Name="SecondaryPanel" Grid.Column="1" Margin="10,0,0,0">
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="SECONDARY"/>
-                                    <Button x:Name="SecondaryColorButton"
-                                            Height="48"
-                                            Style="{StaticResource GlassButtonStyle}"
-                                            Click="SecondaryColorButton_Click"/>
-                                </StackPanel>
+                                <Button x:Name="SyncAllButton"
+                                        Margin="0,0,10,0"
+                                        Height="42"
+                                        Style="{StaticResource GlassButtonStyle}"
+                                        Click="SyncAllButton_Click"
+                                        Content="Match All"/>
+                                <Button x:Name="UndoLightingButton"
+                                        Grid.Column="1"
+                                        Margin="10,0,0,0"
+                                        Height="42"
+                                        Style="{StaticResource GlassButtonStyle}"
+                                        Click="UndoLightingButton_Click"
+                                        Content="Undo"/>
                             </Grid>
 
-                            <Grid Grid.Row="4" Margin="0,0,0,14">
+                            <StackPanel x:Name="SecondaryPanel" Grid.Row="4" Margin="0,0,0,14">
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="MORPH SECONDARY"/>
+                                <Button x:Name="SecondaryColorButton"
+                                        Height="42"
+                                        Style="{StaticResource GlassButtonStyle}"
+                                        Click="SecondaryColorButton_Click"/>
+                            </StackPanel>
+
+                            <Grid Grid.Row="5" Margin="0,0,0,14">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -621,7 +646,7 @@
                                            VerticalAlignment="Center"/>
                             </Grid>
 
-                            <Grid Grid.Row="5" Margin="0,0,0,16">
+                            <Grid Grid.Row="6" Margin="0,0,0,16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -645,7 +670,7 @@
                                            VerticalAlignment="Center"/>
                             </Grid>
 
-                            <Border Grid.Row="6"
+                            <Border Grid.Row="7"
                                     Padding="14"
                                     CornerRadius="18"
                                     Background="#45202A38"
@@ -668,7 +693,7 @@
                         </Grid>
                     </Border>
 
-                    <Border Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,0,14">
+                    <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource GlassCardStyle}" Padding="16" Margin="7,0,0,7">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Thermals"/>
                             <TextBlock Style="{StaticResource SectionHintStyle}"
@@ -703,7 +728,7 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,0,14">
+                    <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource GlassCardStyle}" Padding="16" Margin="0,7,7,0">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Desktop"/>
                             <TextBlock Style="{StaticResource SectionHintStyle}"
@@ -730,6 +755,19 @@
                             </Border>
                             <TextBlock x:Name="DesktopStatusText"
                                        Margin="0,12,0,0"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource GlassCardStyle}" Padding="16" Margin="7,7,0,0">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Live State"/>
+                            <TextBlock x:Name="PendingText"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       Margin="0,10,0,10"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock x:Name="FanHintText"
                                        Foreground="{StaticResource MutedBrush}"
                                        TextWrapping="Wrap"/>
 
@@ -799,26 +837,12 @@
                             </Border>
                         </StackPanel>
                     </Border>
-
-                    <Border Style="{StaticResource GlassCardStyle}" Padding="18">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Live State"/>
-                            <TextBlock x:Name="PendingText"
-                                       Foreground="{StaticResource MutedBrush}"
-                                       Margin="0,10,0,10"
-                                       TextWrapping="Wrap"/>
-                            <TextBlock x:Name="FanHintText"
-                                       Foreground="{StaticResource MutedBrush}"
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </Grid>
+                    </Grid>
+                </Grid>
 
             <Button x:Name="ApplyLightingButton"
                     Grid.Row="2"
-                    Height="68"
+                    Height="56"
                     Margin="0,14,0,0"
                     Style="{StaticResource PrimaryActionButtonStyle}"
                     Click="ApplyLightingButton_Click">

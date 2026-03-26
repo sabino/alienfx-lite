@@ -159,9 +159,25 @@ namespace
         case AlienFX_A_Breathing:
             return { MakeAction(AlienFX_A_Breathing, action.primaryColor, action.speedPercent) };
         case AlienFX_A_Spectrum:
-            return { MakeAction(AlienFX_A_Spectrum, action.primaryColor, action.speedPercent) };
+            return {
+                MakeAction(AlienFX_A_Spectrum, 0xFF4848, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0xFF9A38, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0xFFD648, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0x6EFF61, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0x5AE4FF, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0x5884FF, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0xB86EFF, action.speedPercent)
+            };
         case AlienFX_A_Rainbow:
-            return { MakeAction(AlienFX_A_Rainbow, action.primaryColor, action.speedPercent) };
+            return {
+                MakeAction(AlienFX_A_Rainbow, 0xFF4848, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0xFF9A38, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0xFFD648, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0x6EFF61, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0x5AE4FF, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0x5884FF, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0xB86EFF, action.speedPercent)
+            };
         default:
             return {};
         }
@@ -297,6 +313,7 @@ extern "C" int32_t AfxLiteEnumerateDevices(
 
             std::wstring description(device.dev->description.begin(), device.dev->description.end());
             wcsncpy_s(target.description, description.c_str(), _TRUNCATE);
+            wcsncpy_s(target.devicePath, device.dev->devicePath.c_str(), _TRUNCATE);
 
             target.vendorId = device.vid;
             target.productId = device.pid;
@@ -341,6 +358,76 @@ extern "C" int32_t AfxLiteApplyLightActions(
         return AfxLiteBridgeStatus_NotFound;
     }
 
+    if (device->version == API_V4 && persistDefault == 0)
+    {
+        std::vector<bool> handled(static_cast<size_t>(actionCount), false);
+        bool attempted = false;
+
+        for (int32_t index = 0; index < actionCount; index++)
+        {
+            if (handled[static_cast<size_t>(index)] || actions[index].actionType != AlienFX_A_Color)
+            {
+                continue;
+            }
+
+            std::vector<byte> lights;
+            lights.reserve(static_cast<size_t>(actionCount));
+            for (int32_t candidate = index; candidate < actionCount; candidate++)
+            {
+                if (!handled[static_cast<size_t>(candidate)] &&
+                    actions[candidate].actionType == AlienFX_A_Color &&
+                    actions[candidate].primaryColor == actions[index].primaryColor)
+                {
+                    lights.push_back(actions[candidate].lightId);
+                    handled[static_cast<size_t>(candidate)] = true;
+                }
+            }
+
+            Afx_colorcode color = ToColor(actions[index].primaryColor);
+            Afx_action action{ AlienFX_A_Color, 0, 0, color.r, color.g, color.b };
+            if (!device->dev->SetMultiColor(&lights, action))
+            {
+                SetLastError(L"Failed to apply API v4 static colors.");
+                return AfxLiteBridgeStatus_Error;
+            }
+
+            attempted = true;
+        }
+
+        for (int32_t index = 0; index < actionCount; index++)
+        {
+            if (handled[static_cast<size_t>(index)])
+            {
+                continue;
+            }
+
+            std::vector<Afx_action> phases = BuildPhaseList(actions[index]);
+            if (phases.empty())
+            {
+                SetLastError(L"Unsupported light action type.");
+                return AfxLiteBridgeStatus_Unsupported;
+            }
+
+            Afx_lightblock block{ actions[index].lightId, phases };
+            if (!device->dev->SetAction(&block))
+            {
+                std::wstringstream stream;
+                stream << L"Failed to apply API v4 action to light " << static_cast<int>(actions[index].lightId) << L".";
+                SetLastError(stream.str());
+                return AfxLiteBridgeStatus_Error;
+            }
+
+            attempted = true;
+        }
+
+        if (attempted && !device->dev->UpdateColors())
+        {
+            SetLastError(L"Failed to commit API v4 lighting update.");
+            return AfxLiteBridgeStatus_Error;
+        }
+    }
+    else
+    {
     std::vector<Afx_lightblock> blocks;
     blocks.reserve(actionCount);
     for (int32_t index = 0; index < actionCount; index++)
@@ -361,6 +448,7 @@ extern "C" int32_t AfxLiteApplyLightActions(
         stream << L"Failed to apply lighting actions to device " << device->vid << L":" << device->pid << L".";
         SetLastError(stream.str());
         return AfxLiteBridgeStatus_Error;
+    }
     }
 
     if (!ApplyBrightness(device, brightnessLightIds, brightnessLightIdCount, brightnessPercent, includePowerLights))

@@ -22,6 +22,7 @@ internal sealed class BrokerRuntime : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _pipeServerTask;
     private Task? _maintenanceTask;
+    private Task? _startupRestoreTask;
     private bool _started;
     private string? _lastLightingError;
     private string? _lastFanError;
@@ -46,7 +47,7 @@ internal sealed class BrokerRuntime : IDisposable
         _started = true;
         _configuration = _configStore.Load();
         PersistedStateFile persistedState = _stateStore.Load();
-        _lightingStates = persistedState.Lighting.Snapshots
+        _lightingStates = (persistedState.Lighting.Snapshots ?? [])
             .Where(static snapshot => !string.IsNullOrWhiteSpace(snapshot.DeviceKey))
             .GroupBy(static snapshot => snapshot.DeviceKey!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.OrdinalIgnoreCase);
@@ -58,9 +59,9 @@ internal sealed class BrokerRuntime : IDisposable
 
         try
         {
-            RestoreLastStateCore("startup");
             _pipeServerTask = Task.Run(() => RunPipeServerAsync(_cts.Token), _cts.Token);
             _maintenanceTask = Task.Run(() => RunMaintenanceLoopAsync(_cts.Token), _cts.Token);
+            _startupRestoreTask = Task.Run(() => RunStartupRestoreAsync(_cts.Token), _cts.Token);
             _diagnostics.Info("Broker runtime started.");
         }
         catch (Exception ex)
@@ -88,6 +89,7 @@ internal sealed class BrokerRuntime : IDisposable
             [
                 _pipeServerTask ?? Task.CompletedTask,
                 _maintenanceTask ?? Task.CompletedTask,
+                _startupRestoreTask ?? Task.CompletedTask,
             ];
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
@@ -100,6 +102,7 @@ internal sealed class BrokerRuntime : IDisposable
             _cts = null;
             _pipeServerTask = null;
             _maintenanceTask = null;
+            _startupRestoreTask = null;
             _diagnostics.Info("Broker runtime stopped.");
         }
     }
@@ -155,10 +158,11 @@ internal sealed class BrokerRuntime : IDisposable
         {
             try
             {
-                using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
-                ServiceRequest request = await PipeProtocol.ReadAsync<ServiceRequest>(pipe, timeout.Token).ConfigureAwait(false);
+                using CancellationTokenSource readTimeout = new(TimeSpan.FromSeconds(10));
+                ServiceRequest request = await PipeProtocol.ReadAsync<ServiceRequest>(pipe, readTimeout.Token).ConfigureAwait(false);
                 ServiceResponse response = Dispatch(request);
-                await PipeProtocol.WriteAsync(pipe, response, timeout.Token).ConfigureAwait(false);
+                using CancellationTokenSource writeTimeout = new(TimeSpan.FromSeconds(10));
+                await PipeProtocol.WriteAsync(pipe, response, writeTimeout.Token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -201,6 +205,23 @@ internal sealed class BrokerRuntime : IDisposable
                     _fanController.Probe(out _lastFanError);
                 }
             }
+        }
+    }
+
+    private async Task RunStartupRestoreAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            RestoreLastStateCore("startup");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _diagnostics.Error("Initial hardware restore failed. The broker will continue running.", ex);
         }
     }
 

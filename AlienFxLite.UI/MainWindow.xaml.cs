@@ -8,12 +8,14 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using AlienFxLite.Contracts;
+using AlienFxLite.Hardware.Lighting;
 using DrawingColor = System.Drawing.Color;
 using MediaColor = System.Windows.Media.Color;
 using MediaBrushes = System.Windows.Media.Brushes;
 using WinForms = System.Windows.Forms;
 using WpfCursors = System.Windows.Input.Cursors;
 using WpfButton = System.Windows.Controls.Button;
+using WpfComboBox = System.Windows.Controls.ComboBox;
 using WpfMessageBox = System.Windows.MessageBox;
 using WpfPoint = System.Windows.Point;
 
@@ -27,20 +29,27 @@ public partial class MainWindow : Window
 
     private readonly AlienFxLiteServiceClient _client = new();
     private readonly DesktopSettingsStore _desktopSettingsStore = new();
+    private readonly LocalLightingStateStore _lightingStateStore = new();
     private readonly GitHubReleaseUpdateService _updateService = new();
+    private readonly AlienFxLightingController _lightingController = new();
     private readonly AppLaunchOptions _launchOptions;
     private readonly WinForms.ColorDialog _colorDialog = new() { FullOpen = true };
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(5) };
-    private readonly Dictionary<int, ToggleButton> _zoneButtons = [];
+    private readonly Dictionary<int, WpfButton> _zoneColorButtons = [];
+    private readonly Dictionary<int, Border> _zoneEditorCards = [];
+    private readonly Dictionary<int, WpfComboBox> _zoneEffectCombos = [];
     private readonly List<KeyCapCell> _keyboardCells = [];
-    private readonly HashSet<int> _selectedZoneIds = [];
+    private readonly Dictionary<int, ZoneLightingState> _draftZoneStates = [];
     private readonly WinForms.NotifyIcon _notifyIcon;
 
     private DesktopSettings _desktopSettings;
+    private LocalLightingState _localLightingState;
     private LightingDeviceProfile? _lightingProfile;
     private Dictionary<string, LightingSnapshot> _lightingStatesByDeviceKey = new(StringComparer.OrdinalIgnoreCase);
-    private DrawingColor _primaryColor = DrawingColor.White;
     private DrawingColor _secondaryColor = DrawingColor.Black;
+    private LightingSnapshot? _committedLightingSnapshot;
+    private LightingSnapshot? _undoLightingSnapshot;
+    private int? _activeZoneId;
     private bool _refreshing;
     private bool _loadingLightingState;
     private bool _loadingLightingProfiles;
@@ -51,6 +60,7 @@ public partial class MainWindow : Window
     private bool _startHiddenPending;
     private bool _trayTipShown;
     private string? _desktopSettingsError;
+    private string? _localLightingError;
     private string? _updateError;
     private GitHubReleaseUpdateService.UpdateCheckResult? _lastUpdateResult;
 
@@ -63,6 +73,10 @@ public partial class MainWindow : Window
     {
         _launchOptions = launchOptions;
         _desktopSettings = _desktopSettingsStore.Load();
+        _localLightingState = _lightingStateStore.Load();
+        _lightingStatesByDeviceKey = _localLightingState.Snapshots
+            .Where(static snapshot => !string.IsNullOrWhiteSpace(snapshot.DeviceKey))
+            .ToDictionary(static snapshot => snapshot.DeviceKey!, static snapshot => snapshot, StringComparer.OrdinalIgnoreCase);
 
         try
         {
@@ -91,15 +105,15 @@ public partial class MainWindow : Window
         _loadingDesktopSettings = false;
 
         CurrentVersionText.Text = $"AlienFx Lite {AppVersionInfo.CurrentVersion}";
-        UpdateColorButton(PrimaryColorButton, _primaryColor);
         UpdateColorButton(SecondaryColorButton, _secondaryColor);
         UpdateTrackLabels();
         UpdateEffectUi();
         UpdateLightingCapabilityUi();
         UpdateApplyButtonState();
+        UpdateZoneActionButtons();
         UpdateDesktopStatus();
         UpdateUpdateUi();
-        RebuildZoneChipsAndDeck(null, preserveSelection: false);
+        RebuildZoneEditorsAndDeck(null);
         RefreshKeyboardPreview();
         UpdateTrayVisibility();
 
@@ -140,49 +154,26 @@ public partial class MainWindow : Window
 
     private async void ApplyLightingButton_Click(object sender, RoutedEventArgs e)
     {
-        try
+        if (_lightingDirty)
         {
-            List<int> zoneIds = GetSelectedZoneIds().ToList();
-            if (zoneIds.Count == 0)
-            {
-                WpfMessageBox.Show(this, "Select at least one keyboard zone.", "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            LightingEffect effect = (LightingEffect)(EffectCombo.SelectedItem ?? LightingEffect.Static);
-            if (LightingEffectCatalog.RequiresWholeDeviceSelection(_lightingProfile, effect) &&
-                _lightingProfile is not null &&
-                zoneIds.Count != _lightingProfile.Zones.Count)
-            {
-                WpfMessageBox.Show(
-                    this,
-                    $"'{effect}' applies to the whole API v5 surface. Select all {_lightingProfile.Zones.Count} zones before applying it.",
-                    "AlienFx Lite",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-                return;
-            }
-
-            SetLightingStateRequest request = new(
-                _lightingProfile?.DeviceKey,
-                zoneIds,
-                effect,
-                ToRgb(_primaryColor),
-                effect == LightingEffect.Morph ? ToRgb(_secondaryColor) : null,
-                (int)SpeedSlider.Value,
-                (int)BrightnessSlider.Value,
-                KeepAliveCheck.IsChecked,
-                EnabledCheck.IsChecked);
-
-            await _client.SetLightingStateAsync(request).ConfigureAwait(true);
-            _lightingDirty = false;
-            UpdateApplyButtonState();
-            await RefreshStatusAsync(silent: true, preservePendingLighting: false).ConfigureAwait(true);
+            await SaveLightingChangesAsync(showErrors: true, refreshBrokerStatus: true).ConfigureAwait(true);
+            return;
         }
-        catch (Exception ex)
+
+        LightingSnapshot? saved = _committedLightingSnapshot ?? (_lightingProfile is null ? null : ResolveLightingSnapshot(_lightingProfile));
+        if (saved is null)
         {
-            WpfMessageBox.Show(this, ex.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
         }
+
+        await ApplyLightingSnapshotAsync(
+                saved,
+                showErrors: true,
+                refreshBrokerStatus: true,
+                persistState: false,
+                setAsCommitted: false,
+                successMessage: "Saved lighting restored to the keyboard.")
+            .ConfigureAwait(true);
     }
 
     private async void FanAutoButton_Click(object sender, RoutedEventArgs e) =>
@@ -191,14 +182,78 @@ public partial class MainWindow : Window
     private async void FanMaxButton_Click(object sender, RoutedEventArgs e) =>
         await ApplyFanModeAsync(FanControlMode.Max).ConfigureAwait(true);
 
-    private void PrimaryColorButton_Click(object sender, RoutedEventArgs e) => ChooseColor(primary: true);
-
-    private void SecondaryColorButton_Click(object sender, RoutedEventArgs e) => ChooseColor(primary: false);
-
-    private void EffectCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void SecondaryColorButton_Click(object sender, RoutedEventArgs e)
     {
+        if (!ChooseSecondaryColor())
+        {
+            return;
+        }
+
+        await PreviewLightingChangesAsync(showErrors: true, refreshBrokerStatus: false).ConfigureAwait(true);
+    }
+
+    private async void SyncAllButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lightingProfile is null || _draftZoneStates.Count == 0)
+        {
+            return;
+        }
+
+        int sourceZoneId = _activeZoneId is int activeZoneId && _draftZoneStates.ContainsKey(activeZoneId)
+            ? activeZoneId
+            : _draftZoneStates.Keys.OrderBy(static zoneId => zoneId).First();
+
+        RgbColor sourceColor = _draftZoneStates[sourceZoneId].PrimaryColor;
+        foreach (int zoneId in _draftZoneStates.Keys.ToArray())
+        {
+            ZoneLightingState state = _draftZoneStates[zoneId];
+            _draftZoneStates[zoneId] = state with { PrimaryColor = sourceColor };
+        }
+
+        MarkLightingDirty();
+        await PreviewLightingChangesAsync(showErrors: true, refreshBrokerStatus: false).ConfigureAwait(true);
+    }
+
+    private async void UndoLightingButton_Click(object sender, RoutedEventArgs e)
+    {
+        LightingSnapshot? snapshot = _undoLightingSnapshot ?? _committedLightingSnapshot;
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        LoadLightingSnapshot(snapshot, setAsCommitted: true);
+        await ApplyLightingSnapshotAsync(
+                snapshot,
+                showErrors: true,
+                refreshBrokerStatus: false,
+                persistState: false,
+                setAsCommitted: false,
+                successMessage: "Restored the last saved lighting state.")
+            .ConfigureAwait(true);
+    }
+
+    private async void EffectCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingLightingState)
+        {
+            UpdateEffectUi();
+            return;
+        }
+
+        if (_lightingProfile is not null && _activeZoneId is int zoneId)
+        {
+            LightingEffect selectedEffect = LightingEffectCatalog.NormalizeEffect(_lightingProfile, (LightingEffect)(EffectCombo.SelectedItem ?? LightingEffect.Static));
+            ZoneLightingState existing = _draftZoneStates.TryGetValue(zoneId, out ZoneLightingState? state)
+                ? state
+                : new ZoneLightingState(zoneId, selectedEffect, new RgbColor(255, 255, 255), null, (int)SpeedSlider.Value, true);
+            _draftZoneStates[zoneId] = existing with { Effect = selectedEffect };
+        }
+
         UpdateEffectUi();
         MarkLightingDirty();
+
+        await PreviewLightingChangesAsync(showErrors: true, refreshBrokerStatus: false).ConfigureAwait(true);
     }
 
     private void LightingProfileCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -210,10 +265,15 @@ public partial class MainWindow : Window
 
         _lightingProfile = LightingProfileCombo.SelectedItem as LightingDeviceProfile;
         _lightingDirty = false;
-        RebuildZoneChipsAndDeck(_lightingProfile, preserveSelection: false);
+        PersistActiveLightingProfileKey(_lightingProfile?.DeviceKey);
+        _undoLightingSnapshot = null;
+        RebuildZoneEditorsAndDeck(_lightingProfile);
         UpdateEffectOptions();
         LoadLightingSnapshot(ResolveLightingSnapshot(_lightingProfile));
     }
+
+    internal void HandleExternalActivationRequest() =>
+        Dispatcher.Invoke(RestoreFromTray);
 
     private void SpeedSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
@@ -228,23 +288,6 @@ public partial class MainWindow : Window
     }
 
     private void SettingChanged(object sender, RoutedEventArgs e) => MarkLightingDirty();
-
-    private void ZoneButton_Changed(object sender, RoutedEventArgs e)
-    {
-        if (sender is ToggleButton { Tag: int zoneId })
-        {
-            if (((ToggleButton)sender).IsChecked == true)
-            {
-                _selectedZoneIds.Add(zoneId);
-            }
-            else
-            {
-                _selectedZoneIds.Remove(zoneId);
-            }
-        }
-
-        MarkLightingDirty();
-    }
 
     private void DesktopSettingChanged(object sender, RoutedEventArgs e)
     {
@@ -329,24 +372,30 @@ public partial class MainWindow : Window
         _refreshing = true;
         try
         {
-            StatusSnapshot status = await _client.GetStatusAsync().ConfigureAwait(true);
-            ApplyStatus(status, preservePendingLighting && _lightingDirty);
-        }
-        catch (Exception ex)
-        {
-            ServiceStatusText.Text = "Broker unavailable";
-            ServiceStatusText.Foreground = new SolidColorBrush(Danger);
-            DeviceStatusText.Text = ex.Message;
-            FanModeText.Text = "Mode: unavailable";
-            FanRpmText.Text = "RPM: n/a";
-            LightingHintText.Text = "The broker is offline, so keyboard changes cannot be applied right now.";
-            FanHintText.Text = "Fan control requires the broker service.";
-            PendingText.Text = "Broker unavailable.";
-            PendingText.Foreground = new SolidColorBrush(Danger);
-
-            if (!silent)
+            StatusSnapshot? brokerStatus = null;
+            Exception? brokerError = null;
+            try
             {
-                WpfMessageBox.Show(this, ex.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
+                brokerStatus = await _client.GetStatusAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                brokerError = ex;
+            }
+
+            ApplyBrokerStatus(brokerStatus);
+            RefreshLightingStatus(preservePendingLighting && _lightingDirty);
+
+            if (!preservePendingLighting && ShouldMaintainLighting())
+            {
+                MaintainLighting();
+            }
+
+            UpdateDeviceStatusText(brokerStatus?.Devices.FanAvailable == true);
+
+            if (brokerError is not null && !silent)
+            {
+                WpfMessageBox.Show(this, brokerError.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         finally
@@ -368,28 +417,40 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ApplyStatus(StatusSnapshot status, bool preservePendingLighting)
+    private void ApplyBrokerStatus(StatusSnapshot? status)
     {
+        if (status is null)
+        {
+            ServiceStatusText.Text = "Broker unavailable";
+            ServiceStatusText.Foreground = new SolidColorBrush(Danger);
+            FanModeText.Text = "Mode: unavailable";
+            FanRpmText.Text = "RPM: n/a";
+            FanHintText.Text = "Fan control requires the broker service.";
+            return;
+        }
+
         ServiceStatusText.Text = "Broker connected";
         ServiceStatusText.Foreground = new SolidColorBrush(AccentStrong);
-        DeviceStatusText.Text = status.Devices.LightingProfile is null
-            ? $"Lighting: {(status.Devices.LightingAvailable ? "online" : "offline")}  |  Fans: {(status.Devices.FanAvailable ? "online" : "offline")}"
-            : $"{status.Devices.LightingProfile.DisplayName}  |  Surfaces: {status.Devices.LightingProfiles.Count}  |  Fans: {(status.Devices.FanAvailable ? "online" : "offline")}";
         FanModeText.Text = $"Mode: {status.Fan.Mode}";
         FanRpmText.Text = status.Fan.Rpm.Count > 0
             ? $"RPM: {string.Join(" / ", status.Fan.Rpm)}"
             : $"RPM: n/a ({status.Fan.Message})";
         FanHintText.Text = status.Fan.Message;
+    }
 
-        _lightingStatesByDeviceKey = status.LightingStates
-            .Where(static snapshot => !string.IsNullOrWhiteSpace(snapshot.DeviceKey))
-            .ToDictionary(static snapshot => snapshot.DeviceKey!, static snapshot => snapshot, StringComparer.OrdinalIgnoreCase);
+    private void RefreshLightingStatus(bool preservePendingLighting)
+    {
+        bool lightingAvailable = _lightingController.Probe(out _localLightingError);
+        IReadOnlyList<LightingDeviceProfile> profiles = lightingAvailable
+            ? _lightingController.AvailableProfiles
+            : _lightingProfile is null ? [] : [_lightingProfile];
 
         string? preferredProfileKey = preservePendingLighting && _lightingDirty
             ? _lightingProfile?.DeviceKey
-            : status.Lighting.DeviceKey;
-        UpdateLightingProfileSelector(status.Devices.LightingProfiles, preferredProfileKey);
-        RebuildZoneChipsAndDeck(_lightingProfile, preservePendingLighting && _lightingDirty);
+            : _localLightingState.ActiveDeviceKey;
+
+        UpdateLightingProfileSelector(profiles, preferredProfileKey);
+        RebuildZoneEditorsAndDeck(_lightingProfile);
         UpdateEffectOptions();
 
         if (!preservePendingLighting)
@@ -402,6 +463,19 @@ public partial class MainWindow : Window
         UpdateLightingCapabilityUi();
         UpdateApplyButtonState();
         RefreshKeyboardPreview();
+    }
+
+    private void UpdateDeviceStatusText(bool fanAvailable)
+    {
+        if (_lightingProfile is not null)
+        {
+            DeviceStatusText.Text = $"{_lightingProfile.DisplayName}  |  Lighting: online  |  Fans: {(fanAvailable ? "online" : "offline")}";
+            return;
+        }
+
+        DeviceStatusText.Text = string.IsNullOrWhiteSpace(_localLightingError)
+            ? $"Lighting: offline  |  Fans: {(fanAvailable ? "online" : "offline")}"
+            : $"{_localLightingError}  |  Fans: {(fanAvailable ? "online" : "offline")}";
     }
 
     private void UpdateLightingProfileSelector(IReadOnlyList<LightingDeviceProfile> profiles, string? preferredProfileKey)
@@ -423,6 +497,7 @@ public partial class MainWindow : Window
 
             LightingProfileCombo.SelectedItem = selected;
             _lightingProfile = selected;
+            PersistActiveLightingProfileKey(_lightingProfile?.DeviceKey);
         }
         finally
         {
@@ -430,48 +505,52 @@ public partial class MainWindow : Window
         }
     }
 
-    private void LoadLightingSnapshot(LightingSnapshot snapshot)
+    private void LoadLightingSnapshot(LightingSnapshot snapshot, bool setAsCommitted = true)
     {
+        LightingSnapshot normalized = NormalizeSnapshot(snapshot);
         _loadingLightingState = true;
         try
         {
-            BrightnessSlider.Value = snapshot.Brightness;
-            KeepAliveCheck.IsChecked = snapshot.KeepAlive;
-            EnabledCheck.IsChecked = snapshot.Enabled;
+            BrightnessSlider.Value = normalized.Brightness;
+            KeepAliveCheck.IsChecked = normalized.KeepAlive;
+            EnabledCheck.IsChecked = normalized.Enabled;
 
-            ZoneLightingState? reference = snapshot.ZoneStates.OrderBy(static zone => zone.ZoneId).FirstOrDefault();
+            ZoneLightingState? reference = normalized.ZoneStates.OrderBy(static zone => zone.ZoneId).FirstOrDefault();
             if (reference is not null)
             {
-                EffectCombo.SelectedItem = LightingEffectCatalog.NormalizeEffect(_lightingProfile, reference.Effect);
                 SpeedSlider.Value = reference.Speed;
-                _primaryColor = FromRgb(reference.PrimaryColor);
                 _secondaryColor = reference.SecondaryColor is null ? DrawingColor.Black : FromRgb(reference.SecondaryColor.Value);
-                UpdateColorButton(PrimaryColorButton, _primaryColor);
                 UpdateColorButton(SecondaryColorButton, _secondaryColor);
             }
 
-            HashSet<int> activeZones = snapshot.ZoneStates
-                .Where(static zone => zone.Enabled)
-                .Select(static zone => zone.ZoneId)
-                .ToHashSet();
-
-            _selectedZoneIds.Clear();
-            foreach ((int zoneId, ToggleButton toggle) in _zoneButtons)
+            _draftZoneStates.Clear();
+            foreach (ZoneLightingState zoneState in normalized.ZoneStates)
             {
-                bool active = activeZones.Contains(zoneId);
-                toggle.IsChecked = active;
-                if (active)
-                {
-                    _selectedZoneIds.Add(zoneId);
-                }
+                _draftZoneStates[zoneState.ZoneId] = zoneState;
             }
+
+            _activeZoneId = _lightingProfile?.Zones.Any(zone => zone.ZoneId == _activeZoneId) == true
+                ? _activeZoneId
+                : _lightingProfile?.Zones.FirstOrDefault()?.ZoneId;
         }
         finally
         {
             _loadingLightingState = false;
         }
 
-        _lightingDirty = false;
+        if (setAsCommitted)
+        {
+            _committedLightingSnapshot = normalized;
+            _lightingDirty = false;
+            _undoLightingSnapshot = null;
+        }
+
+        UpdateFocusedZoneControls();
+        UpdateEffectUi();
+        UpdateZoneEditorButtons();
+        UpdateZoneActionButtons();
+        RefreshKeyboardPreview();
+        UpdateApplyButtonState();
     }
 
     private void UpdateEffectOptions(bool preserveSelection = true)
@@ -493,12 +572,101 @@ public partial class MainWindow : Window
         {
             _loadingLightingState = wasLoadingLightingState;
         }
+
+        UpdateFocusedZoneControls();
+    }
+
+    private ZoneLightingState? GetFocusedZoneState()
+    {
+        if (_activeZoneId is not int zoneId)
+        {
+            return null;
+        }
+
+        return _draftZoneStates.TryGetValue(zoneId, out ZoneLightingState? state)
+            ? state
+            : null;
+    }
+
+    private void UpdateFocusedZoneControls()
+    {
+        LightingEffect selected = LightingEffectCatalog.GetDefaultEffect(_lightingProfile);
+        ZoneLightingState? activeState = GetFocusedZoneState();
+        if (activeState is not null)
+        {
+            selected = LightingEffectCatalog.NormalizeEffect(_lightingProfile, activeState.Effect);
+        }
+
+        bool wasLoadingLightingState = _loadingLightingState;
+        _loadingLightingState = true;
+        try
+        {
+            FocusedZoneText.Text = _activeZoneId is int zoneId
+                ? $"Focused section: {GetZoneName(zoneId)}"
+                : "Focused section: none";
+
+            if (EffectCombo.Items.Count > 0)
+            {
+                EffectCombo.SelectedItem = selected;
+            }
+
+            DrawingColor focusedSecondary = activeState?.SecondaryColor is { } secondaryColor
+                ? FromRgb(secondaryColor)
+                : _secondaryColor;
+            UpdateColorButton(SecondaryColorButton, focusedSecondary);
+        }
+        finally
+        {
+            _loadingLightingState = wasLoadingLightingState;
+        }
+    }
+
+    private LightingSnapshot ComposeWorkingSnapshot()
+    {
+        if (_lightingProfile is null)
+        {
+            return new LightingSnapshot(false, 100, false, null, []);
+        }
+
+        bool enabled = EnabledCheck.IsChecked != false;
+        int speed = (int)SpeedSlider.Value;
+        LightingEffect defaultEffect = LightingEffectCatalog.GetDefaultEffect(_lightingProfile);
+
+        IReadOnlyList<ZoneLightingState> zones = _lightingProfile.Zones
+            .Select(zone =>
+            {
+                ZoneLightingState draft = _draftZoneStates.TryGetValue(zone.ZoneId, out ZoneLightingState? state)
+                    ? state
+                    : new ZoneLightingState(zone.ZoneId, defaultEffect, new RgbColor(255, 255, 255), null, speed, enabled);
+
+                LightingEffect zoneEffect = LightingEffectCatalog.NormalizeEffect(_lightingProfile, draft.Effect);
+
+                return draft with
+                {
+                    ZoneId = zone.ZoneId,
+                    Effect = zoneEffect,
+                    SecondaryColor = zoneEffect == LightingEffect.Morph
+                        ? draft.SecondaryColor ?? ToRgb(_secondaryColor)
+                        : null,
+                    Speed = speed,
+                    Enabled = enabled,
+                };
+            })
+            .OrderBy(static zone => zone.ZoneId)
+            .ToArray();
+
+        return NormalizeSnapshot(new LightingSnapshot(
+            enabled,
+            (int)BrightnessSlider.Value,
+            KeepAliveCheck.IsChecked == true,
+            _lightingProfile.DeviceKey,
+            zones));
     }
 
     private LightingSnapshot ResolveLightingSnapshot(LightingDeviceProfile? profile)
     {
         if (profile is not null &&
-            _lightingStatesByDeviceKey.TryGetValue(profile.DeviceKey, out LightingSnapshot? snapshot))
+            TryResolveStoredLightingSnapshot(profile, out LightingSnapshot? snapshot))
         {
             return snapshot;
         }
@@ -511,50 +679,344 @@ public partial class MainWindow : Window
             profile?.Zones.Select(static zone => new ZoneLightingState(zone.ZoneId, LightingEffect.Static, new RgbColor(255, 255, 255), null, 50, true)).ToArray() ?? []);
     }
 
-    private void RebuildZoneChipsAndDeck(LightingDeviceProfile? profile, bool preserveSelection)
+    private bool TryResolveStoredLightingSnapshot(LightingDeviceProfile profile, out LightingSnapshot snapshot)
     {
-        bool profileChanged = !string.Equals(_lightingProfile?.DeviceKey, profile?.DeviceKey, StringComparison.OrdinalIgnoreCase);
-        _lightingProfile = profile;
-
-        if (!preserveSelection || profileChanged)
+        if (_lightingStatesByDeviceKey.TryGetValue(profile.DeviceKey, out LightingSnapshot? exact))
         {
-            _selectedZoneIds.Clear();
-            if (profile is not null)
-            {
-                foreach (LightingZoneDefinition zone in profile.Zones)
-                {
-                    _selectedZoneIds.Add(zone.ZoneId);
-                }
-            }
+            snapshot = NormalizeSnapshot(exact with { DeviceKey = profile.DeviceKey });
+            return true;
         }
 
-        ZoneChipPanel.Children.Clear();
-        _zoneButtons.Clear();
+        string templateKey = ExtractTemplateKey(profile.DeviceKey);
+        LightingSnapshot? migrated = _lightingStatesByDeviceKey.Values.FirstOrDefault(candidate =>
+            !string.IsNullOrWhiteSpace(candidate.DeviceKey) &&
+            (string.Equals(ExtractTemplateKey(candidate.DeviceKey), templateKey, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(candidate.DeviceKey, BuildLegacyProfileKey(profile), StringComparison.OrdinalIgnoreCase)));
+
+        if (migrated is not null)
+        {
+            snapshot = NormalizeSnapshot(migrated with { DeviceKey = profile.DeviceKey });
+            return true;
+        }
+
+        snapshot = default!;
+        return false;
+    }
+
+    private LightingSnapshot NormalizeSnapshot(LightingSnapshot snapshot)
+    {
+        if (_lightingProfile is null)
+        {
+            return snapshot;
+        }
+
+        Dictionary<int, ZoneLightingState> existing = snapshot.ZoneStates.ToDictionary(static zone => zone.ZoneId);
+        IReadOnlyList<ZoneLightingState> zones = _lightingProfile.Zones
+            .Select(zone => existing.TryGetValue(zone.ZoneId, out ZoneLightingState? state)
+                ? state with { ZoneId = zone.ZoneId, Effect = LightingEffectCatalog.NormalizeEffect(_lightingProfile, state.Effect) }
+                : new ZoneLightingState(zone.ZoneId, LightingEffectCatalog.GetDefaultEffect(_lightingProfile), new RgbColor(255, 255, 255), null, 50, true))
+            .OrderBy(static zone => zone.ZoneId)
+            .ToArray();
+
+        return new LightingSnapshot(
+            snapshot.Enabled,
+            Math.Clamp(snapshot.Brightness, 0, 100),
+            snapshot.KeepAlive,
+            _lightingProfile.DeviceKey,
+            zones);
+    }
+
+    private void SaveLocalLightingState(LightingSnapshot snapshot)
+    {
+        if (string.IsNullOrWhiteSpace(snapshot.DeviceKey))
+        {
+            return;
+        }
+
+        _lightingStatesByDeviceKey[snapshot.DeviceKey] = snapshot;
+        _localLightingState = new LocalLightingState(
+            snapshot.DeviceKey,
+            _lightingStatesByDeviceKey.Values
+                .OrderBy(static state => state.DeviceKey, StringComparer.OrdinalIgnoreCase)
+                .ToList());
+        _lightingStateStore.Save(_localLightingState);
+    }
+
+    private async Task<bool> PreviewLightingChangesAsync(bool showErrors, bool refreshBrokerStatus)
+    {
+        if (_lightingProfile is null)
+        {
+            if (showErrors)
+            {
+                WpfMessageBox.Show(this, _localLightingError ?? "No supported AlienFX lighting surface is currently available.", "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            return false;
+        }
+
+        LightingSnapshot updated = ComposeWorkingSnapshot();
+        return await ApplyLightingSnapshotAsync(
+                updated,
+                showErrors,
+                refreshBrokerStatus,
+                persistState: false,
+                setAsCommitted: false,
+                successMessage: "Live lighting preview applied. Press Save Lighting to persist it.")
+            .ConfigureAwait(true);
+    }
+
+    private async Task<bool> SaveLightingChangesAsync(bool showErrors, bool refreshBrokerStatus)
+    {
+        if (_lightingProfile is null)
+        {
+            if (showErrors)
+            {
+                WpfMessageBox.Show(this, _localLightingError ?? "No supported AlienFX lighting surface is currently available.", "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            return false;
+        }
+
+        LightingSnapshot updated = ComposeWorkingSnapshot();
+        return await ApplyLightingSnapshotAsync(
+                updated,
+                showErrors,
+                refreshBrokerStatus,
+                persistState: true,
+                setAsCommitted: true,
+                successMessage: "Lighting saved for restore, startup, and keepalive.")
+            .ConfigureAwait(true);
+    }
+
+    private async Task<bool> ApplyLightingSnapshotAsync(
+        LightingSnapshot snapshot,
+        bool showErrors,
+        bool refreshBrokerStatus,
+        bool persistState,
+        bool setAsCommitted,
+        string successMessage)
+    {
+        try
+        {
+            LightingSnapshot normalized = NormalizeSnapshot(snapshot);
+
+            if (!_lightingController.Apply(normalized, out string? applyError))
+            {
+                throw new InvalidOperationException(applyError ?? "Failed to apply keyboard lighting.");
+            }
+
+            if (persistState &&
+                normalized.KeepAlive &&
+                !_lightingController.PersistDefaultState(normalized, out string? persistError) &&
+                !string.IsNullOrWhiteSpace(persistError))
+            {
+                PendingText.Text = persistError;
+                PendingText.Foreground = new SolidColorBrush(Danger);
+            }
+
+            if (persistState)
+            {
+                SaveLocalLightingState(normalized);
+                LoadLightingSnapshot(normalized, setAsCommitted);
+            }
+            _localLightingError = null;
+
+            if (!persistState)
+            {
+                UpdateFocusedZoneControls();
+                UpdateZoneEditorButtons();
+                UpdateZoneActionButtons();
+                RefreshKeyboardPreview();
+                UpdateApplyButtonState();
+            }
+
+            UpdateApplyButtonState();
+
+            if (refreshBrokerStatus)
+            {
+                StatusSnapshot? fanStatus = null;
+                try
+                {
+                    fanStatus = await _client.GetStatusAsync().ConfigureAwait(true);
+                }
+                catch
+                {
+                }
+
+                ApplyBrokerStatus(fanStatus);
+                UpdateDeviceStatusText(fanStatus?.Devices.FanAvailable == true);
+            }
+
+            PendingText.Text = successMessage;
+            PendingText.Foreground = new SolidColorBrush(AccentStrong);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (showErrors)
+            {
+                WpfMessageBox.Show(this, ex.Message, "AlienFx Lite", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            else
+            {
+                PendingText.Text = ex.Message;
+                PendingText.Foreground = new SolidColorBrush(Danger);
+            }
+
+            return false;
+        }
+    }
+
+    private void PersistActiveLightingProfileKey(string? deviceKey)
+    {
+        if (string.IsNullOrWhiteSpace(deviceKey))
+        {
+            return;
+        }
+
+        _localLightingState = _localLightingState with { ActiveDeviceKey = deviceKey };
+        _lightingStateStore.Save(_localLightingState);
+    }
+
+    private bool ShouldMaintainLighting()
+    {
+        if (_lightingDirty || _lightingProfile is null)
+        {
+            return false;
+        }
+
+        if (!TryResolveStoredLightingSnapshot(_lightingProfile, out LightingSnapshot snapshot))
+        {
+            return false;
+        }
+
+        return snapshot.Enabled && snapshot.KeepAlive;
+    }
+
+    private void MaintainLighting()
+    {
+        if (_lightingProfile is null)
+        {
+            return;
+        }
+
+        if (!TryResolveStoredLightingSnapshot(_lightingProfile, out LightingSnapshot snapshot))
+        {
+            return;
+        }
+
+        if (_lightingController.Maintain(snapshot, out string? error))
+        {
+            _localLightingError = null;
+            return;
+        }
+
+        _localLightingError = error;
+    }
+
+    private static string BuildLegacyProfileKey(LightingDeviceProfile profile) =>
+        $"{profile.VendorId:X4}:{profile.ProductId:X4}:{profile.SurfaceName}";
+
+    private static string ExtractTemplateKey(string? deviceKey)
+    {
+        if (string.IsNullOrWhiteSpace(deviceKey))
+        {
+            return string.Empty;
+        }
+
+        int separator = deviceKey.IndexOf('|');
+        return separator >= 0 && separator + 1 < deviceKey.Length
+            ? deviceKey[(separator + 1)..]
+            : deviceKey;
+    }
+
+    private void RebuildZoneEditorsAndDeck(LightingDeviceProfile? profile)
+    {
+        _lightingProfile = profile;
+        ZoneEditorPanel.Children.Clear();
+        _zoneColorButtons.Clear();
+        _zoneEditorCards.Clear();
+        _zoneEffectCombos.Clear();
+
+        if (_lightingProfile is not null && !_lightingProfile.Zones.Any(zone => zone.ZoneId == _activeZoneId))
+        {
+            _activeZoneId = _lightingProfile.Zones.FirstOrDefault()?.ZoneId;
+        }
+
+        ZoneEditorPanel.Columns = profile?.Zones.Count switch
+        {
+            > 0 and <= 4 => profile.Zones.Count,
+            > 4 => 4,
+            _ => 1,
+        };
 
         foreach (LightingZoneDefinition zone in profile?.Zones ?? [])
         {
-            ToggleButton chip = new()
+            Border card = new()
             {
+                Style = (Style)FindResource("ZoneEditorCardStyle"),
                 Tag = zone.ZoneId,
-                Content = zone.Name,
-                Style = (Style)FindResource("ZoneChipStyle"),
-                IsChecked = _selectedZoneIds.Contains(zone.ZoneId),
+                Cursor = WpfCursors.Hand,
+            };
+            card.MouseLeftButtonUp += ZoneEditorCard_MouseLeftButtonUp;
+
+            Grid cardGrid = new();
+            cardGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            cardGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            cardGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            TextBlock title = new()
+            {
+                Text = zone.Name,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextBrush"),
+                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Display"),
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 13,
             };
 
-            chip.Checked += ZoneButton_Changed;
-            chip.Unchecked += ZoneButton_Changed;
-            ZoneChipPanel.Children.Add(chip);
-            _zoneButtons[zone.ZoneId] = chip;
+            WpfComboBox effectCombo = new()
+            {
+                Tag = zone.ZoneId,
+                Height = 36,
+                Margin = new Thickness(0, 8, 0, 10),
+                Style = (Style)FindResource("CompactGlassComboBoxStyle"),
+                ItemsSource = LightingEffectCatalog.GetSupportedEffects(profile),
+            };
+            effectCombo.SelectionChanged += ZoneEffectCombo_SelectionChanged;
+
+            WpfButton colorButton = new()
+            {
+                Tag = zone.ZoneId,
+                Height = 40,
+                Style = (Style)FindResource("GlassButtonStyle"),
+            };
+            colorButton.Click += ZoneColorButton_Click;
+
+            cardGrid.Children.Add(title);
+            Grid.SetRow(effectCombo, 1);
+            cardGrid.Children.Add(effectCombo);
+            Grid.SetRow(colorButton, 2);
+            cardGrid.Children.Add(colorButton);
+            card.Child = cardGrid;
+
+            ZoneEditorPanel.Children.Add(card);
+            _zoneColorButtons[zone.ZoneId] = colorButton;
+            _zoneEditorCards[zone.ZoneId] = card;
+            _zoneEffectCombos[zone.ZoneId] = effectCombo;
         }
 
         BuildKeyboardDeck(profile);
+        UpdateFocusedZoneControls();
+        UpdateZoneEditorButtons();
+        UpdateZoneActionButtons();
     }
 
     private void BuildKeyboardDeck(LightingDeviceProfile? profile)
     {
         KeyboardDeckDescriptionText.Text = profile?.PreviewGrid is not null
-            ? $"This deck mirrors the mapped '{profile.PreviewGrid.Name}' surface. Click any lit region or use the zone chips below."
-            : "This deck previews the currently detected AlienFX zones. Click any lit region or use the zone chips below.";
+            ? $"This deck mirrors the mapped '{profile.PreviewGrid.Name}' surface. Click any lit region or use the matching zone card below."
+            : "This deck previews the currently detected AlienFX zones. Click any lit region or use the matching zone card below.";
 
         KeyboardMatrixPanel.Children.Clear();
         _keyboardCells.Clear();
@@ -590,35 +1052,123 @@ public partial class MainWindow : Window
 
     private void KeyboardCell_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not Border { Tag: int zoneId } || !_zoneButtons.TryGetValue(zoneId, out ToggleButton? zoneButton))
+        if (sender is not Border { Tag: int zoneId })
         {
             return;
         }
 
-        zoneButton.IsChecked = zoneButton.IsChecked != true;
+        SetActiveZone(zoneId);
         e.Handled = true;
     }
 
-    private void ChooseColor(bool primary)
+    private void ZoneEditorCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        _colorDialog.Color = primary ? _primaryColor : _secondaryColor;
-        if (_colorDialog.ShowDialog() != WinForms.DialogResult.OK)
+        if (sender is Border { Tag: int zoneId })
+        {
+            SetActiveZone(zoneId);
+            e.Handled = true;
+        }
+    }
+
+    private async void ZoneColorButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not WpfButton { Tag: int zoneId })
         {
             return;
         }
 
-        if (primary)
+        if (!ChooseZoneColor(zoneId))
         {
-            _primaryColor = _colorDialog.Color;
-            UpdateColorButton(PrimaryColorButton, _primaryColor);
-        }
-        else
-        {
-            _secondaryColor = _colorDialog.Color;
-            UpdateColorButton(SecondaryColorButton, _secondaryColor);
+            return;
         }
 
+        await PreviewLightingChangesAsync(showErrors: true, refreshBrokerStatus: false).ConfigureAwait(true);
+    }
+
+    private async void ZoneEffectCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingLightingState || sender is not WpfComboBox { Tag: int zoneId, SelectedItem: LightingEffect selectedEffect })
+        {
+            return;
+        }
+
+        SetActiveZone(zoneId);
+        LightingEffect normalizedEffect = LightingEffectCatalog.NormalizeEffect(_lightingProfile, selectedEffect);
+        ZoneLightingState existing = _draftZoneStates.TryGetValue(zoneId, out ZoneLightingState? state)
+            ? state
+            : new ZoneLightingState(zoneId, normalizedEffect, ToRgb(DrawingColor.White), null, (int)SpeedSlider.Value, EnabledCheck.IsChecked != false);
+
+        _draftZoneStates[zoneId] = existing with
+        {
+            Effect = normalizedEffect,
+            SecondaryColor = normalizedEffect == LightingEffect.Morph
+                ? existing.SecondaryColor ?? ToRgb(_secondaryColor)
+                : existing.SecondaryColor,
+        };
+
         MarkLightingDirty();
+        await PreviewLightingChangesAsync(showErrors: true, refreshBrokerStatus: false).ConfigureAwait(true);
+    }
+
+    private bool ChooseZoneColor(int zoneId)
+    {
+        DrawingColor current = _draftZoneStates.TryGetValue(zoneId, out ZoneLightingState? state)
+            ? FromRgb(state.PrimaryColor)
+            : DrawingColor.White;
+        _colorDialog.Color = current;
+        if (_colorDialog.ShowDialog() != WinForms.DialogResult.OK)
+        {
+            return false;
+        }
+
+        SetActiveZone(zoneId);
+        ZoneLightingState next = _draftZoneStates.TryGetValue(zoneId, out ZoneLightingState? existing)
+            ? existing with { PrimaryColor = ToRgb(_colorDialog.Color) }
+            : new ZoneLightingState(zoneId, LightingEffectCatalog.GetDefaultEffect(_lightingProfile), ToRgb(_colorDialog.Color), null, 50, true);
+        _draftZoneStates[zoneId] = next;
+        MarkLightingDirty();
+        return true;
+    }
+
+    private bool ChooseSecondaryColor()
+    {
+        ZoneLightingState? focusedState = GetFocusedZoneState();
+        DrawingColor current = focusedState?.SecondaryColor is { } secondaryColor
+            ? FromRgb(secondaryColor)
+            : _secondaryColor;
+
+        _colorDialog.Color = current;
+        if (_colorDialog.ShowDialog() != WinForms.DialogResult.OK)
+        {
+            return false;
+        }
+
+        _secondaryColor = _colorDialog.Color;
+        if (_activeZoneId is int zoneId)
+        {
+            ZoneLightingState existing = _draftZoneStates.TryGetValue(zoneId, out ZoneLightingState? state)
+                ? state
+                : new ZoneLightingState(zoneId, LightingEffectCatalog.GetDefaultEffect(_lightingProfile), ToRgb(DrawingColor.White), ToRgb(_secondaryColor), 50, true);
+            _draftZoneStates[zoneId] = existing with
+            {
+                SecondaryColor = ToRgb(_secondaryColor),
+                Effect = existing.Effect == LightingEffect.Static ? LightingEffect.Morph : existing.Effect,
+            };
+        }
+
+        UpdateColorButton(SecondaryColorButton, _secondaryColor);
+        MarkLightingDirty();
+        return true;
+    }
+
+    private void SetActiveZone(int zoneId)
+    {
+        _activeZoneId = zoneId;
+        UpdateFocusedZoneControls();
+        UpdateEffectUi();
+        UpdateZoneActionButtons();
+        UpdateZoneEditorButtons();
+        RefreshKeyboardPreview();
     }
 
     private void MarkLightingDirty()
@@ -628,30 +1178,71 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!_lightingDirty && _committedLightingSnapshot is not null)
+        {
+            _undoLightingSnapshot = _committedLightingSnapshot;
+        }
+
         _lightingDirty = true;
         UpdateApplyButtonState();
+        UpdateZoneEditorButtons();
+        UpdateZoneActionButtons();
         RefreshKeyboardPreview();
     }
 
     private void UpdateApplyButtonState()
     {
-        ApplyButtonTitleText.Text = _lightingDirty ? "Apply Lighting" : "Reapply Lighting";
+        if (_lightingProfile is null)
+        {
+            ApplyButtonTitleText.Text = "Save Lighting";
+            ApplyButtonHintText.Text = "A local lighting surface must be detected before keyboard changes can be sent.";
+            ApplyLightingButton.IsEnabled = false;
+            PendingText.Text = string.IsNullOrWhiteSpace(_localLightingError)
+                ? "No lighting surface is currently available."
+                : _localLightingError;
+            PendingText.Foreground = new SolidColorBrush(Danger);
+            ApplyLightingButton.Background = new SolidColorBrush(MediaColor.FromRgb(31, 51, 70));
+            ApplyLightingButton.BorderBrush = new SolidColorBrush(MediaColor.FromRgb(83, 108, 141));
+            return;
+        }
+
+        ApplyLightingButton.IsEnabled = true;
+        ApplyButtonTitleText.Text = _lightingDirty ? "Save Lighting" : "Restore Saved Lighting";
         ApplyButtonHintText.Text = _lightingDirty
-            ? "Commit pending deck changes to the keyboard and saved broker state."
-            : "Force the current saved deck back onto the keyboard if firmware drifted.";
+            ? "Live changes are already on the keyboard. Save to persist them for restore, startup, and keepalive."
+            : "Push the last saved lighting state back onto the keyboard if firmware drifted.";
 
         PendingText.Text = _lightingDirty
-            ? "Pending local edits. Press Apply Lighting to commit them."
-            : "Keyboard deck matches the saved broker state.";
-        PendingText.Foreground = new SolidColorBrush(_lightingDirty ? Accent : Colors.White);
+            ? "Unsaved live changes. Save to persist them, or use Undo to go back to the last saved state."
+            : "Keyboard deck matches the saved local state.";
+        PendingText.Foreground = new SolidColorBrush(_lightingDirty ? AccentStrong : Colors.White);
+        ApplyLightingButton.Background = _lightingDirty
+            ? new LinearGradientBrush(
+                MediaColor.FromRgb(84, 235, 255),
+                MediaColor.FromRgb(27, 162, 207),
+                new WpfPoint(0, 0),
+                new WpfPoint(1, 1))
+            : new LinearGradientBrush(
+                MediaColor.FromRgb(34, 74, 106),
+                MediaColor.FromRgb(19, 46, 71),
+                new WpfPoint(0, 0),
+                new WpfPoint(1, 1));
+        ApplyLightingButton.BorderBrush = new SolidColorBrush(_lightingDirty
+            ? MediaColor.FromRgb(236, 255, 255)
+            : MediaColor.FromRgb(109, 162, 201));
     }
 
     private void UpdateEffectUi()
     {
-        LightingEffect effect = (LightingEffect)(EffectCombo.SelectedItem ?? LightingEffect.Static);
-        SecondaryPanel.Visibility = effect == LightingEffect.Morph ? Visibility.Visible : Visibility.Collapsed;
-        SpeedSlider.IsEnabled = effect != LightingEffect.Static;
-        SpeedValueText.IsEnabled = effect != LightingEffect.Static;
+        IReadOnlyCollection<ZoneLightingState> states = _draftZoneStates.Values;
+        bool focusedMorph = GetFocusedZoneState()?.Effect == LightingEffect.Morph;
+        bool anyAnimated = states.Any(state => LightingEffectCatalog.IsAnimated(state.Effect));
+        SecondaryPanel.Visibility = focusedMorph ? Visibility.Visible : Visibility.Collapsed;
+        SecondaryColorButton.Visibility = focusedMorph ? Visibility.Visible : Visibility.Collapsed;
+        SpeedSlider.IsEnabled = anyAnimated;
+        SpeedValueText.IsEnabled = anyAnimated;
+        UpdateZoneEditorButtons();
+        UpdateZoneActionButtons();
     }
 
     private void UpdateLightingCapabilityUi()
@@ -675,45 +1266,105 @@ public partial class MainWindow : Window
 
     private void RefreshKeyboardPreview()
     {
-        LightingEffect effect = (LightingEffect)(EffectCombo.SelectedItem ?? LightingEffect.Static);
-        MediaColor primary = MediaColor.FromRgb(_primaryColor.R, _primaryColor.G, _primaryColor.B);
-        MediaColor secondary = MediaColor.FromRgb(_secondaryColor.R, _secondaryColor.G, _secondaryColor.B);
-        bool enabled = EnabledCheck.IsChecked != false;
+        if (_lightingProfile is null || _keyboardCells.Count == 0)
+        {
+            LightingHintText.Text = string.IsNullOrWhiteSpace(_localLightingError)
+                ? "No local AlienFX lighting surface is currently available."
+                : _localLightingError;
+            return;
+        }
+
+        LightingSnapshot preview = ComposeWorkingSnapshot();
+        Dictionary<int, ZoneLightingState> zones = preview.ZoneStates.ToDictionary(static zone => zone.ZoneId);
 
         foreach (KeyCapCell cell in _keyboardCells)
         {
-            bool selected = _zoneButtons.TryGetValue(cell.ZoneId, out ToggleButton? toggle) && toggle.IsChecked == true;
-            cell.Element.Background = BuildKeyBrush(selected, enabled, effect, primary, secondary);
-            cell.Element.BorderBrush = new SolidColorBrush(selected
-                ? WithAlpha(Lighten(primary, enabled ? 0.22 : 0.08), enabled ? (byte)230 : (byte)110)
-                : MediaColor.FromArgb(92, 76, 97, 125));
-            cell.Element.Opacity = selected ? (enabled ? 1 : 0.74) : 0.94;
+            if (!zones.TryGetValue(cell.ZoneId, out ZoneLightingState? zoneState))
+            {
+                cell.Element.Background = BuildKeyBrush(false, false, LightingEffect.Static, Colors.White, Colors.Black);
+                cell.Element.BorderBrush = new SolidColorBrush(MediaColor.FromArgb(92, 76, 97, 125));
+                cell.Element.Opacity = 0.9;
+                continue;
+            }
+
+            MediaColor primary = MediaColor.FromRgb(zoneState.PrimaryColor.R, zoneState.PrimaryColor.G, zoneState.PrimaryColor.B);
+            MediaColor secondary = zoneState.SecondaryColor is { } secondaryColor
+                ? MediaColor.FromRgb(secondaryColor.R, secondaryColor.G, secondaryColor.B)
+                : Colors.Black;
+            bool zoneEnabled = preview.Enabled && zoneState.Enabled;
+            bool active = _activeZoneId == zoneState.ZoneId;
+            cell.Element.Background = BuildKeyBrush(true, zoneEnabled, zoneState.Effect, primary, secondary);
+            cell.Element.BorderBrush = new SolidColorBrush(active
+                ? WithAlpha(Lighten(primary, zoneEnabled ? 0.30 : 0.14), 244)
+                : WithAlpha(Lighten(primary, zoneEnabled ? 0.14 : 0.04), zoneEnabled ? (byte)170 : (byte)110));
+            cell.Element.Opacity = zoneEnabled ? 1 : 0.78;
         }
 
-        string selectedZones = string.Join(", ", GetSelectedZoneIds().Select(GetZoneName));
-        if (string.IsNullOrWhiteSpace(selectedZones))
-        {
-            selectedZones = "No zones selected";
-        }
+        string activeZone = _activeZoneId is int zoneId ? GetZoneName(zoneId) : "No focused zone";
+        int distinctColorCount = preview.ZoneStates
+            .Select(static zone => zone.PrimaryColor)
+            .Distinct()
+            .Count();
 
-        string surfaceHint = LightingEffectCatalog.RequiresWholeDeviceSelection(_lightingProfile, effect)
+        LightingEffect focusedEffect = GetFocusedZoneState()?.Effect ?? LightingEffectCatalog.GetDefaultEffect(_lightingProfile);
+        bool usesWholeSurface = preview.ZoneStates.Any(zone => LightingEffectCatalog.RequiresWholeDeviceSelection(_lightingProfile, zone.Effect));
+        string surfaceHint = usesWholeSurface
             ? "  |  API v5 animation applies to the whole surface"
             : string.Empty;
 
         LightingHintText.Text =
-            $"Selected: {selectedZones}  |  Effect: {EffectCombo.SelectedItem}  |  Brightness: {(int)BrightnessSlider.Value}%  |  KeepAlive: {(KeepAliveCheck.IsChecked == true ? "on" : "off")}{surfaceHint}";
+            $"Focus: {activeZone}  |  Effect: {focusedEffect}  |  Colors in deck: {distinctColorCount}  |  Brightness: {(int)BrightnessSlider.Value}%  |  KeepAlive: {(KeepAliveCheck.IsChecked == true ? "on" : "off")}{surfaceHint}";
     }
-
-    private IReadOnlyList<int> GetSelectedZoneIds() =>
-        _zoneButtons
-            .Where(pair => pair.Value.IsChecked == true)
-            .Select(pair => pair.Key)
-            .OrderBy(static zoneId => zoneId)
-            .ToArray();
 
     private string GetZoneName(int zoneId) =>
         _lightingProfile?.Zones.FirstOrDefault(zone => zone.ZoneId == zoneId)?.Name
         ?? $"Zone {zoneId}";
+
+    private void UpdateZoneEditorButtons()
+    {
+        foreach ((int zoneId, WpfButton button) in _zoneColorButtons)
+        {
+            DrawingColor color = _draftZoneStates.TryGetValue(zoneId, out ZoneLightingState? state)
+                ? FromRgb(state.PrimaryColor)
+                : DrawingColor.White;
+            UpdateColorButton(button, color);
+        }
+
+        bool wasLoadingLightingState = _loadingLightingState;
+        _loadingLightingState = true;
+        try
+        {
+            foreach ((int zoneId, WpfComboBox combo) in _zoneEffectCombos)
+            {
+                LightingEffect effect = _draftZoneStates.TryGetValue(zoneId, out ZoneLightingState? state)
+                    ? LightingEffectCatalog.NormalizeEffect(_lightingProfile, state.Effect)
+                    : LightingEffectCatalog.GetDefaultEffect(_lightingProfile);
+                combo.ItemsSource = LightingEffectCatalog.GetSupportedEffects(_lightingProfile);
+                combo.SelectedItem = effect;
+            }
+        }
+        finally
+        {
+            _loadingLightingState = wasLoadingLightingState;
+        }
+
+        foreach ((int zoneId, Border card) in _zoneEditorCards)
+        {
+            bool active = _activeZoneId == zoneId;
+            card.BorderBrush = new SolidColorBrush(active ? AccentStrong : MediaColor.FromRgb(67, 94, 130));
+            card.Background = new SolidColorBrush(active ? MediaColor.FromArgb(132, 34, 73, 94) : MediaColor.FromArgb(81, 34, 50, 69));
+        }
+    }
+
+    private void UpdateZoneActionButtons()
+    {
+        bool hasZones = _lightingProfile is not null && _lightingProfile.Zones.Count > 0;
+        string syncSource = _activeZoneId is int zoneId ? GetZoneName(zoneId) : "current zone";
+        SyncAllButton.Content = hasZones ? $"Match All Colors to {syncSource}" : "Match All";
+        SyncAllButton.IsEnabled = hasZones;
+        UndoLightingButton.IsEnabled = (_undoLightingSnapshot ?? _committedLightingSnapshot) is not null;
+        UndoLightingButton.Content = _lightingDirty ? "Undo Unsaved" : "Undo";
+    }
 
     private static IReadOnlyList<int?> BuildDeckCells(LightingDeviceProfile? profile, out int columns, out int rows)
     {
@@ -916,18 +1567,50 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
-        if (_allowExit || !_desktopSettings.MinimizeToTray)
+        if (!_allowExit && _desktopSettings.MinimizeToTray)
         {
+            e.Cancel = true;
+            HideToTray(showNotification: false);
             return;
         }
 
-        e.Cancel = true;
-        HideToTray(showNotification: false);
+        if (_lightingDirty)
+        {
+            MessageBoxResult result = WpfMessageBox.Show(
+                this,
+                "Lighting changes are already previewed on the keyboard but are not saved yet.\n\nYes: save and close\nNo: close without saving\nCancel: keep editing",
+                "AlienFx Lite",
+                MessageBoxButton.YesNoCancel,
+                MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Cancel)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            if (result == MessageBoxResult.Yes)
+            {
+                e.Cancel = true;
+                Dispatcher.InvokeAsync(async () =>
+                {
+                    if (await SaveLightingChangesAsync(showErrors: true, refreshBrokerStatus: true).ConfigureAwait(true))
+                    {
+                        _allowExit = true;
+                        Close();
+                    }
+                });
+                return;
+            }
+
+            return;
+        }
     }
 
     private void Window_Closed(object? sender, EventArgs e)
     {
         _refreshTimer.Stop();
+        _lightingController.Dispose();
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
     }
