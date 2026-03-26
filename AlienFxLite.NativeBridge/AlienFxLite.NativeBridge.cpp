@@ -159,9 +159,25 @@ namespace
         case AlienFX_A_Breathing:
             return { MakeAction(AlienFX_A_Breathing, action.primaryColor, action.speedPercent) };
         case AlienFX_A_Spectrum:
-            return { MakeAction(AlienFX_A_Spectrum, action.primaryColor, action.speedPercent) };
+            return {
+                MakeAction(AlienFX_A_Spectrum, 0xFF4848, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0xFF9A38, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0xFFD648, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0x6EFF61, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0x5AE4FF, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0x5884FF, action.speedPercent),
+                MakeAction(AlienFX_A_Spectrum, 0xB86EFF, action.speedPercent)
+            };
         case AlienFX_A_Rainbow:
-            return { MakeAction(AlienFX_A_Rainbow, action.primaryColor, action.speedPercent) };
+            return {
+                MakeAction(AlienFX_A_Rainbow, 0xFF4848, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0xFF9A38, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0xFFD648, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0x6EFF61, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0x5AE4FF, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0x5884FF, action.speedPercent),
+                MakeAction(AlienFX_A_Rainbow, 0xB86EFF, action.speedPercent)
+            };
         default:
             return {};
         }

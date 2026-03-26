@@ -86,7 +86,19 @@ public sealed class AlienFxLightingController : IDisposable
 
             if (profile.ApiVersion == 4)
             {
-                return TryApplyNativeSnapshot(profile, snapshot, persistDefault: false, out error);
+                if (TryApplyV4Snapshot(profile, snapshot, resetDevice: true, forceUpdate: false, out error))
+                {
+                    return true;
+                }
+
+                string? v4Error = error;
+                bool nativeResult = TryApplyNativeSnapshot(profile, snapshot, persistDefault: false, out error);
+                if (!nativeResult && !string.IsNullOrWhiteSpace(v4Error))
+                {
+                    error = $"{v4Error} Native fallback: {error}";
+                }
+
+                return nativeResult;
             }
 
             return TryApplyNativeSnapshot(profile, snapshot, persistDefault: false, out error);
@@ -111,7 +123,19 @@ public sealed class AlienFxLightingController : IDisposable
 
             if (profile.ApiVersion == 4)
             {
-                return TryApplyNativeSnapshot(profile, snapshot, persistDefault: false, out error);
+                if (TryApplyV4Snapshot(profile, snapshot, resetDevice: false, forceUpdate: true, out error))
+                {
+                    return true;
+                }
+
+                string? v4Error = error;
+                bool nativeResult = TryApplyNativeSnapshot(profile, snapshot, persistDefault: false, out error);
+                if (!nativeResult && !string.IsNullOrWhiteSpace(v4Error))
+                {
+                    error = $"{v4Error} Native fallback: {error}";
+                }
+
+                return nativeResult;
             }
 
             return TryApplyNativeSnapshot(profile, snapshot, persistDefault: false, out error);
@@ -142,7 +166,19 @@ public sealed class AlienFxLightingController : IDisposable
 
             if (profile.ApiVersion == 4)
             {
-                return TryApplyNativeSnapshot(profile, snapshot, persistDefault: true, out error);
+                if (TryPersistV4DefaultState(profile, snapshot, out error))
+                {
+                    return true;
+                }
+
+                string? v4Error = error;
+                bool nativeResult = TryApplyNativeSnapshot(profile, snapshot, persistDefault: true, out error);
+                if (!nativeResult && !string.IsNullOrWhiteSpace(v4Error))
+                {
+                    error = $"{v4Error} Native fallback: {error}";
+                }
+
+                return nativeResult;
             }
 
             return TryApplyNativeSnapshot(profile, snapshot, persistDefault: true, out error);
@@ -288,6 +324,8 @@ public sealed class AlienFxLightingController : IDisposable
             {
                 return false;
             }
+
+            needsUpdate = true;
         }
 
         foreach (ZoneLightingState zoneState in normalized.ZoneStates.OrderBy(static state => state.ZoneId))
@@ -458,29 +496,30 @@ public sealed class AlienFxLightingController : IDisposable
     {
         error = null;
 
-        IReadOnlyList<NativeLightingDevice> nativeDevices;
+        List<NativeLightingDevice> nativeDevices = [];
+        string? nativeEnumerationError = null;
         try
         {
-            nativeDevices = AlienFxNativeBridge.EnumerateDevices();
+            nativeDevices = AlienFxNativeBridge.EnumerateDevices().ToList();
         }
         catch (Exception ex)
         {
-            error = ex.Message;
-            _profilesByKey = new Dictionary<string, LightingDeviceProfile>(StringComparer.OrdinalIgnoreCase);
-            _nativeByProfileKey = new Dictionary<string, NativeLightingDevice>(StringComparer.OrdinalIgnoreCase);
-            _availableProfiles = [];
-            _currentProfile = null;
-            return false;
+            nativeEnumerationError = ex.Message;
         }
+
+        IReadOnlyList<NativeLightingDevice> hidFallbackDevices = EnumerateFallbackHidDevices(nativeDevices);
+        List<NativeLightingDevice> discoveredDevices = nativeDevices
+            .Concat(hidFallbackDevices)
+            .ToList();
 
         Dictionary<string, LightingDeviceProfile> nextProfiles = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, NativeLightingDevice> nextNative = new(StringComparer.OrdinalIgnoreCase);
         List<LightingDeviceProfile> nextOrderedProfiles = [];
-        int duplicateDeviceCount = nativeDevices
+        int duplicateDeviceCount = discoveredDevices
             .GroupBy(static device => (device.VendorId, device.ProductId))
             .Count(static group => group.Count() > 1);
 
-        foreach (NativeLightingDevice nativeDevice in nativeDevices)
+        foreach (NativeLightingDevice nativeDevice in discoveredDevices)
         {
             IReadOnlyList<LightingDeviceProfile> templates = _catalog.FindProfiles(nativeDevice.VendorId, nativeDevice.ProductId);
             if (templates.Count == 0)
@@ -522,7 +561,7 @@ public sealed class AlienFxLightingController : IDisposable
             _nativeByProfileKey = nextNative;
             _availableProfiles = [];
             _currentProfile = null;
-            error = "No supported AlienFX lighting devices were found.";
+            error = nativeEnumerationError ?? "No supported AlienFX lighting devices were found.";
             return false;
         }
 
@@ -532,8 +571,33 @@ public sealed class AlienFxLightingController : IDisposable
         _availableProfiles = nextOrderedProfiles;
         _currentProfile = ResolveProfile(preferredKey)
             ?? _availableProfiles.FirstOrDefault();
+        error = null;
 
         return true;
+    }
+
+    private IReadOnlyList<NativeLightingDevice> EnumerateFallbackHidDevices(IReadOnlyList<NativeLightingDevice> nativeDevices)
+    {
+        HashSet<string> knownPaths = nativeDevices
+            .Select(static device => device.DevicePath)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return HidNative.EnumerateDevices()
+            .Where(static device => device.OutputReportLength == 34)
+            .Where(device => !knownPaths.Contains(device.DevicePath))
+            .Where(device => _catalog.FindProfiles(device.VendorId, device.ProductId).Count > 0)
+            .Select(device => new NativeLightingDevice(
+                $"hid::{device.VendorId:X4}:{device.ProductId:X4}:{device.DevicePath}",
+                $"HID VID_{device.VendorId:X4}&PID_{device.ProductId:X4}",
+                device.DevicePath,
+                device.VendorId,
+                device.ProductId,
+                4,
+                SupportsBrightness: true,
+                SupportsPersistence: true,
+                SupportsGlobalEffects: false))
+            .ToArray();
     }
 
     private LightingDeviceProfile? ResolveProfile(string? deviceKey)

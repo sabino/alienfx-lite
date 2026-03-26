@@ -158,10 +158,11 @@ internal sealed class BrokerRuntime : IDisposable
         {
             try
             {
-                using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
-                ServiceRequest request = await PipeProtocol.ReadAsync<ServiceRequest>(pipe, timeout.Token).ConfigureAwait(false);
+                using CancellationTokenSource readTimeout = new(TimeSpan.FromSeconds(10));
+                ServiceRequest request = await PipeProtocol.ReadAsync<ServiceRequest>(pipe, readTimeout.Token).ConfigureAwait(false);
                 ServiceResponse response = Dispatch(request);
-                await PipeProtocol.WriteAsync(pipe, response, timeout.Token).ConfigureAwait(false);
+                using CancellationTokenSource writeTimeout = new(TimeSpan.FromSeconds(10));
+                await PipeProtocol.WriteAsync(pipe, response, writeTimeout.Token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

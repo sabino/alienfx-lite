@@ -135,24 +135,37 @@ public sealed class AwccFanController : IDisposable
                 return false;
             }
 
-            int powerValue = preferredRawPowerValue is > 0
-                ? preferredRawPowerValue.Value
-                : _availablePowerModes.FirstOrDefault(static value => value > 0);
+            List<int> candidates = [];
+            if (preferredRawPowerValue is > 0)
+            {
+                candidates.Add(preferredRawPowerValue.Value);
+            }
 
-            if (powerValue <= 0)
+            foreach (int availableMode in _availablePowerModes.Where(static value => value > 0))
+            {
+                if (!candidates.Contains(availableMode))
+                {
+                    candidates.Add(availableMode);
+                }
+            }
+
+            if (candidates.Count == 0)
             {
                 error = "No automatic fan power mode was detected.";
                 return false;
             }
 
-            int result = CallMethod(SetPowerMode, (byte)powerValue);
-            if (result < 0)
+            foreach (int powerValue in candidates)
             {
-                error = "Failed to restore BIOS-controlled fan mode.";
-                return false;
+                int result = CallMethod(SetPowerMode, (byte)powerValue);
+                if (result >= 0)
+                {
+                    return true;
+                }
             }
 
-            return true;
+            error = $"Failed to restore BIOS-controlled fan mode (tried {string.Join(", ", candidates)}).";
+            return false;
         }
     }
 
@@ -344,7 +357,7 @@ public sealed class AwccFanController : IDisposable
             }
 
             object? result = outParams["argr"];
-            return result is null ? -1 : Convert.ToInt32(result);
+            return NormalizeResult(result);
         }
         catch (ManagementException)
         {
@@ -356,6 +369,23 @@ public sealed class AwccFanController : IDisposable
             IsAvailable = false;
             return -1;
         }
+    }
+
+    private static int NormalizeResult(object? result)
+    {
+        return result switch
+        {
+            null => -1,
+            int value => value,
+            uint value => unchecked((int)value),
+            long value => unchecked((int)value),
+            ulong value => unchecked((int)value),
+            short value => value,
+            ushort value => value,
+            byte value => value,
+            sbyte value => value,
+            _ => Convert.ToInt32(result),
+        };
     }
 
     private sealed record FanInfo(byte Id, byte Type);

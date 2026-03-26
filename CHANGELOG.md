@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 - 2026-03-26
+
+- Added per-zone effect selectors and live per-zone color state in the desktop deck, with clearer pending-save feedback and undo-to-saved behavior.
+- Moved version/update status into `Live State`, tightened the right rail layout, shortened the bottom save bar, and fixed the combo-box popup readability.
+- Switched lighting edits to instant live preview with explicit `Save Lighting` persistence, plus unsaved-change prompts when exiting.
+- Fixed API v4 `Breathing` handling and implemented chunked multi-phase `Spectrum` and `Rainbow` writes so the Dell G-series 4-zone keyboard no longer advertises dead effects.
+- Added a direct hardware debug probe path for validating HID-backed lighting behavior outside the broker.
+
 ## 0.2.0 - 2026-03-22
 
 - Added capability-driven effect lists per mapped lighting surface across the HID-backed device families.

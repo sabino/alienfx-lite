@@ -29,10 +29,18 @@ internal static class Program
                 return 0;
         }
 
+        using SingleInstanceCoordinator? singleInstance = SingleInstanceCoordinator.TryCreate();
+        if (singleInstance is null)
+        {
+            SingleInstanceCoordinator.SignalExistingInstance();
+            return 0;
+        }
+
         App app = new();
         app.InitializeComponent();
 
         MainWindow window = new(options);
+        singleInstance.StartListening(window.HandleExternalActivationRequest);
         app.Run(window);
         return 0;
     }
