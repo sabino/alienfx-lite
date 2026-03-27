@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 - 2026-03-26
+
+- Added richer per-zone editing cards with local effect, primary/secondary color, speed, zone brightness, and per-zone match actions.
+- Added deck-wide select-all behavior with stronger zone highlighting and double-click selection on the keyboard deck and zone cards.
+- Added editable Spectrum palettes on the API v4 path and custom glass-styled sliders so per-zone controls are visible where the edits actually happen.
+
 ## 0.2.2 - 2026-03-26
 
 - Added in-app installer handoff, so `Check for updates` can download the latest setup and launch the upgrade flow instead of only opening GitHub.

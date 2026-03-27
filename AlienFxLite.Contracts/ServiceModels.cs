@@ -17,7 +17,24 @@ public static class LightingEffectCatalog
     public static IReadOnlyList<LightingEffect> DefaultSupportedEffects { get; } =
         [LightingEffect.Static, LightingEffect.Pulse, LightingEffect.Morph];
 
+    public static IReadOnlyList<RgbColor> DefaultSpectrumPalette { get; } =
+    [
+        new(255, 72, 72),
+        new(255, 154, 56),
+        new(255, 214, 72),
+        new(110, 255, 97),
+        new(90, 228, 255),
+        new(88, 132, 255),
+        new(184, 110, 255),
+    ];
+
     public static bool IsAnimated(LightingEffect effect) => effect != LightingEffect.Static;
+
+    public static bool SupportsSecondaryColor(LightingEffect effect) => effect == LightingEffect.Morph;
+
+    public static bool SupportsPalette(LightingEffect effect) => effect == LightingEffect.Spectrum;
+
+    public static bool UsesPrimaryColor(LightingEffect effect) => effect is not LightingEffect.Rainbow && effect is not LightingEffect.Spectrum;
 
     public static IReadOnlyList<LightingEffect> GetSupportedEffects(LightingDeviceProfile? profile) =>
         profile?.SupportedEffects is { Count: > 0 } effects
@@ -101,7 +118,9 @@ public sealed record ZoneLightingState(
     RgbColor PrimaryColor,
     RgbColor? SecondaryColor,
     int Speed,
-    bool Enabled = true);
+    bool Enabled = true,
+    int Brightness = 100,
+    IReadOnlyList<RgbColor>? Palette = null);
 
 public sealed record LightingSnapshot(
     bool Enabled,

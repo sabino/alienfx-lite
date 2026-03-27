@@ -13,6 +13,7 @@
         MinHeight="720"
         Loaded="Window_Loaded"
         SourceInitialized="Window_SourceInitialized"
+        PreviewKeyDown="Window_PreviewKeyDown"
         Background="#080C13"
         TextElement.FontFamily="Segoe UI Variable Text">
     <Window.Resources>
@@ -368,6 +369,74 @@
             <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         </Style>
+
+        <Style x:Key="GlassSliderStyle" TargetType="Slider">
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid Margin="0,2,0,2">
+                            <Border Height="6"
+                                    VerticalAlignment="Center"
+                                    CornerRadius="3"
+                                    Background="#27384B61"/>
+                            <Track x:Name="PART_Track"
+                                   Minimum="{TemplateBinding Minimum}"
+                                   Maximum="{TemplateBinding Maximum}"
+                                   Value="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Value, Mode=TwoWay}"
+                                   Orientation="{TemplateBinding Orientation}"
+                                   IsDirectionReversed="{TemplateBinding IsDirectionReversed}"
+                                   VerticalAlignment="Center">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Focusable="False"
+                                                  Command="Slider.DecreaseLarge">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Height="6"
+                                                        CornerRadius="3"
+                                                        Background="#FF39C9E7"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Width="16"
+                                           Height="16"
+                                           Cursor="Hand">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Grid>
+                                                    <Ellipse Fill="#2AFFFFFF">
+                                                        <Ellipse.Effect>
+                                                            <BlurEffect Radius="10"/>
+                                                        </Ellipse.Effect>
+                                                    </Ellipse>
+                                                    <Ellipse Fill="#FFF4FEFF"
+                                                             Stroke="#FF39C9E7"
+                                                             StrokeThickness="1.2"/>
+                                                </Grid>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Focusable="False"
+                                                  Command="Slider.IncreaseLarge">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Height="6"
+                                                        CornerRadius="3"
+                                                        Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -447,13 +516,22 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="1.12*"/>
-                    <ColumnDefinition Width="0.88*"/>
-                </Grid.ColumnDefinitions>
+            <ScrollViewer Grid.Row="1"
+                          x:Name="MainContentScrollViewer"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          CanContentScroll="False">
+                <Grid x:Name="MainContentGrid"
+                      MinWidth="1180">
+                    <Grid.LayoutTransform>
+                        <ScaleTransform x:Name="MainContentScaleTransform" ScaleX="1" ScaleY="1"/>
+                    </Grid.LayoutTransform>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.12*"/>
+                        <ColumnDefinition Width="0.88*"/>
+                    </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,14,0">
+                    <Border Grid.Column="0" Style="{StaticResource GlassCardStyle}" Padding="18" Margin="0,0,14,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -510,24 +588,27 @@
                                 <TextBlock Grid.Row="2"
                                            Margin="0,12,0,0"
                                            Foreground="{StaticResource MutedBrush}"
-                                           Text="Each section card below owns its own live color. Click a deck region to focus it, then use Match All if you want one shared color."
+                                           Text="Each section card below now owns its own effect, colors, speed, and zone brightness. Double-click any region or card to select the whole deck."
                                            TextWrapping="Wrap"/>
                             </Grid>
                         </Border>
 
-                        <primitives:UniformGrid x:Name="ZoneEditorPanel"
-                                                Grid.Row="2"
-                                                Columns="4"
-                                                Margin="0,0,0,6"/>
+                        <Grid x:Name="ZoneEditorHost"
+                              Grid.Row="2"
+                              Margin="0,0,0,6"
+                              SizeChanged="ZoneEditorHost_SizeChanged">
+                            <primitives:UniformGrid x:Name="ZoneEditorPanel"
+                                                    Columns="4"/>
+                        </Grid>
 
                         <TextBlock x:Name="LightingHintText"
                                    Grid.Row="3"
                                    Foreground="{StaticResource MutedBrush}"
                                    TextWrapping="Wrap"/>
                     </Grid>
-                </Border>
+                    </Border>
 
-                <Grid Grid.Column="1">
+                    <Grid Grid.Column="1">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
@@ -548,13 +629,14 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <StackPanel Grid.Row="0">
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Lighting Deck"/>
                                 <TextBlock Style="{StaticResource SectionHintStyle}"
                                            Margin="0,6,0,6"
-                                           Text="Each section owns its own primary color and effect. Use focus for the secondary Morph color and deck-wide settings."/>
+                                           Text="Use a selected section here, or Select All to edit the whole deck together. Each zone card below also has its own local controls."/>
                                 <TextBlock x:Name="FocusedZoneText"
                                            Foreground="{StaticResource AccentStrongBrush}"
                                            FontFamily="Segoe UI Variable Display"
@@ -586,7 +668,7 @@
                                 <TextBlock Style="{StaticResource FieldLabelStyle}"
                                            Width="86"
                                            VerticalAlignment="Center"
-                                           Text="FOCUS FX"/>
+                                           Text="SELECTED FX"/>
                                 <ComboBox x:Name="EffectCombo"
                                           Grid.Column="1"
                                           Height="44"
@@ -594,7 +676,15 @@
                                           SelectionChanged="EffectCombo_SelectionChanged"/>
                             </Grid>
 
-                            <Grid Grid.Row="3" Margin="0,0,0,14">
+                            <StackPanel x:Name="PrimaryPanel" Grid.Row="3" Margin="0,0,0,14">
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="PRIMARY"/>
+                                <Button x:Name="PrimaryColorButton"
+                                        Height="42"
+                                        Style="{StaticResource GlassButtonStyle}"
+                                        Click="PrimaryColorButton_Click"/>
+                            </StackPanel>
+
+                            <Grid Grid.Row="4" Margin="0,0,0,14">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
@@ -604,7 +694,7 @@
                                         Height="42"
                                         Style="{StaticResource GlassButtonStyle}"
                                         Click="SyncAllButton_Click"
-                                        Content="Match All"/>
+                                        Content="Select All"/>
                                 <Button x:Name="UndoLightingButton"
                                         Grid.Column="1"
                                         Margin="10,0,0,0"
@@ -614,7 +704,7 @@
                                         Content="Undo"/>
                             </Grid>
 
-                            <StackPanel x:Name="SecondaryPanel" Grid.Row="4" Margin="0,0,0,14">
+                            <StackPanel x:Name="SecondaryPanel" Grid.Row="5" Margin="0,0,0,14">
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="MORPH SECONDARY"/>
                                 <Button x:Name="SecondaryColorButton"
                                         Height="42"
@@ -622,7 +712,7 @@
                                         Click="SecondaryColorButton_Click"/>
                             </StackPanel>
 
-                            <Grid Grid.Row="5" Margin="0,0,0,14">
+                            <Grid Grid.Row="6" Margin="0,0,0,14">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -636,6 +726,7 @@
                                         Grid.Column="1"
                                         Minimum="0"
                                         Maximum="100"
+                                        Style="{StaticResource GlassSliderStyle}"
                                         ValueChanged="SpeedSlider_ValueChanged"/>
                                 <TextBlock x:Name="SpeedValueText"
                                            Grid.Column="2"
@@ -646,7 +737,7 @@
                                            VerticalAlignment="Center"/>
                             </Grid>
 
-                            <Grid Grid.Row="6" Margin="0,0,0,16">
+                            <Grid Grid.Row="7" Margin="0,0,0,16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -660,6 +751,7 @@
                                         Grid.Column="1"
                                         Minimum="0"
                                         Maximum="100"
+                                        Style="{StaticResource GlassSliderStyle}"
                                         ValueChanged="BrightnessSlider_ValueChanged"/>
                                 <TextBlock x:Name="BrightnessValueText"
                                            Grid.Column="2"
@@ -670,7 +762,7 @@
                                            VerticalAlignment="Center"/>
                             </Grid>
 
-                            <Border Grid.Row="7"
+                            <Border Grid.Row="8"
                                     Padding="14"
                                     CornerRadius="18"
                                     Background="#45202A38"
@@ -839,6 +931,7 @@
                     </Border>
                     </Grid>
                 </Grid>
+            </ScrollViewer>
 
             <Button x:Name="ApplyLightingButton"
                     Grid.Row="2"

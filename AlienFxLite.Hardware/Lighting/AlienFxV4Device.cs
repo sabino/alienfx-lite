@@ -201,45 +201,54 @@ internal sealed class AlienFxV4Device : IDisposable
     {
         byte tempo = MapTempo(state.Speed);
         const byte time = 0x07;
+        RgbColor primary = ScaleColor(state.PrimaryColor, state.Brightness);
+        RgbColor secondary = ScaleColor(state.SecondaryColor ?? new RgbColor(0, 0, 0), state.Brightness);
 
         return state.Effect switch
         {
             LightingEffect.Pulse =>
             [
-                new LightPhase((byte)LightingEffect.Pulse, (byte)LightingEffect.Pulse, time, tempo, state.PrimaryColor),
+                new LightPhase((byte)LightingEffect.Pulse, (byte)LightingEffect.Pulse, time, tempo, primary),
                 new LightPhase((byte)LightingEffect.Pulse, (byte)LightingEffect.Pulse, time, tempo, new RgbColor(0, 0, 0)),
             ],
             LightingEffect.Morph =>
             [
-                new LightPhase((byte)LightingEffect.Morph, (byte)LightingEffect.Morph, time, tempo, state.PrimaryColor),
-                new LightPhase((byte)LightingEffect.Morph, (byte)LightingEffect.Morph, time, tempo, state.SecondaryColor ?? new RgbColor(0, 0, 0)),
+                new LightPhase((byte)LightingEffect.Morph, (byte)LightingEffect.Morph, time, tempo, primary),
+                new LightPhase((byte)LightingEffect.Morph, (byte)LightingEffect.Morph, time, tempo, secondary),
             ],
             LightingEffect.Breathing =>
             [
-                new LightPhase((byte)LightingEffect.Breathing, (byte)LightingEffect.Morph, time, tempo, state.PrimaryColor),
+                new LightPhase((byte)LightingEffect.Breathing, (byte)LightingEffect.Morph, time, tempo, primary),
             ],
-            LightingEffect.Spectrum => BuildPalettePhases((byte)LightingEffect.Spectrum, time, tempo),
+            LightingEffect.Spectrum => BuildPalettePhases((byte)LightingEffect.Spectrum, time, tempo, state.Palette, state.Brightness),
             LightingEffect.Rainbow => BuildPalettePhases((byte)LightingEffect.Rainbow, time, tempo),
-            _ => [new LightPhase((byte)LightingEffect.Static, (byte)LightingEffect.Static, time, 0xfa, state.PrimaryColor)],
+            _ => [new LightPhase((byte)LightingEffect.Static, (byte)LightingEffect.Static, time, 0xfa, primary)],
         };
     }
 
-    private static List<LightPhase> BuildPalettePhases(byte actionType, byte time, byte tempo)
+    private static List<LightPhase> BuildPalettePhases(
+        byte actionType,
+        byte time,
+        byte tempo,
+        IReadOnlyList<RgbColor>? palette = null,
+        int brightness = 100)
     {
-        RgbColor[] colors =
-        [
-            new(255, 72, 72),
-            new(255, 154, 56),
-            new(255, 214, 72),
-            new(110, 255, 97),
-            new(90, 228, 255),
-            new(88, 132, 255),
-            new(184, 110, 255),
-        ];
+        IReadOnlyList<RgbColor> colors = palette is { Count: > 0 }
+            ? palette
+            : LightingEffectCatalog.DefaultSpectrumPalette;
 
         return colors
-            .Select(color => new LightPhase(actionType, (byte)LightingEffect.Morph, time, tempo, color))
+            .Select(color => new LightPhase(actionType, (byte)LightingEffect.Morph, time, tempo, ScaleColor(color, brightness)))
             .ToList();
+    }
+
+    private static RgbColor ScaleColor(RgbColor color, int brightness)
+    {
+        double factor = Math.Clamp(brightness, 0, 100) / 100d;
+        return new RgbColor(
+            (byte)Math.Clamp(Math.Round(color.R * factor), 0, 255),
+            (byte)Math.Clamp(Math.Round(color.G * factor), 0, 255),
+            (byte)Math.Clamp(Math.Round(color.B * factor), 0, 255));
     }
 
     private static byte MapTempo(int speed)
